@@ -1,6 +1,18 @@
 /**
- * A refactored example using DuploHub class to control a train
- * which has a motor connected to the Port A of the Hub
+ * TrainController - A complete train control application using DuploHub class
+ * Controls a DUPLO train with a motor connected to Port A of the Hub
+ * 
+ * Architecture:
+ * - TrainController: Main application logic (this file)
+ * - DuploHub: Hardware abstraction layer with multi-task BLE management
+ * - Lpf2Hub: Low-level LEGO Powered Up protocol implementation
+ * 
+ * Features:
+ * - Multi-task architecture with BLE operations in background task (Core 0)
+ * - Non-blocking demo sequence running in main loop (Core 1)
+ * - Automatic connection management and recovery
+ * - Real-time status monitoring and logging
+ * - Thread-safe command queuing for motor and LED control
  * 
  * (c) Copyright 2025
  * Released under MIT License
@@ -9,7 +21,7 @@
 
 #include "DuploHub.h"
 
-// create a DuploHub instance
+// TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
 
 // State variables for train demo
@@ -20,15 +32,15 @@ const unsigned long DEMO_STEP_DURATION = 1000; // 1 second per step
 
 // Callback function when hub connects
 void onHubConnected() {
-    Serial.println("Callback: Hub connected - initializing train demo!");
+    Serial.println("TrainController: Hub connected - initializing train demo!");
     
     // Set hub name
     duploHub.setHubName("DuploTrainHub");
     
     // Print hub information
-    Serial.print("Connected to hub: ");
+    Serial.print("TrainController: Connected to hub: ");
     Serial.println(duploHub.getHubName().c_str());
-    Serial.print("Hub address: ");
+    Serial.print("TrainController: Hub address: ");
     Serial.println(duploHub.getHubAddress().c_str());
     
     // Start the demo
@@ -36,12 +48,12 @@ void onHubConnected() {
     demoStep = 0;
     lastDemoStep = millis();
     
-    Serial.println("Starting train demo sequence...");
+    Serial.println("TrainController: Starting train demo sequence...");
 }
 
 // Callback function when hub disconnects
 void onHubDisconnected() {
-    Serial.println("Callback: Hub disconnected - stopping all operations");
+    Serial.println("TrainController: Hub disconnected - stopping all operations");
     
     // Stop the demo
     demoRunning = false;
@@ -50,24 +62,41 @@ void onHubDisconnected() {
     // Stop motor as safety measure (though hub is disconnected)
     duploHub.stopMotor();
     
-    Serial.println("Train demo stopped due to disconnection");
+    Serial.println("TrainController: Train demo stopped due to disconnection");
 }
 
 void setup() {
     Serial.begin(115200);
     
-    // Register callbacks
+    Serial.println("TrainController: Starting up...");
+    
+    // Register connection event callbacks
     duploHub.setOnConnectedCallback(onHubConnected);
     duploHub.setOnDisconnectedCallback(onHubDisconnected);
     
-    Serial.println("Train controller started, waiting for hub connection...");
+    // Start the BLE task for background connection management
+    duploHub.startBLETask();
+    
+    Serial.println("TrainController: Ready - BLE task running, waiting for hub connection...");
 } 
 
 
 // main loop
 void loop() {
-  // Handle connection and basic hub management
+  // Handle connection callbacks (non-blocking)
   duploHub.update();
+  
+  // Optional: Show system status periodically
+  static unsigned long lastStatusUpdate = 0;
+  if (millis() - lastStatusUpdate > 10000) { // Every 10 seconds
+    Serial.print("TrainController Status - BLE Task: ");
+    Serial.print(duploHub.isBLETaskRunning() ? "Running" : "Stopped");
+    Serial.print(", Hub Connected: ");
+    Serial.print(duploHub.isConnected() ? "Yes" : "No");
+    Serial.print(", Demo Active: ");
+    Serial.println(demoRunning ? "Yes" : "No");
+    lastStatusUpdate = millis();
+  }
 
   // Run train demo sequence if connected and demo is active
   if (duploHub.isConnected() && demoRunning) {
@@ -79,32 +108,32 @@ void loop() {
       
       switch (demoStep) {
         case 0:
-          Serial.println("Demo: Setting LED to GREEN");
+          Serial.println("TrainController Demo: Setting LED to GREEN");
           duploHub.setLedColor(GREEN);
           break;
           
         case 1:
-          Serial.println("Demo: Setting LED to RED");
+          Serial.println("TrainController Demo: Setting LED to RED");
           duploHub.setLedColor(RED);
           break;
           
         case 2:
-          Serial.println("Demo: Motor forward (speed 35)");
+          Serial.println("TrainController Demo: Motor forward (speed 35)");
           duploHub.setMotorSpeed(35);
           break;
           
         case 3:
-          Serial.println("Demo: Stop motor");
+          Serial.println("TrainController Demo: Stop motor");
           duploHub.stopMotor();
           break;
           
         case 4:
-          Serial.println("Demo: Motor backward (speed -35)");
+          Serial.println("TrainController Demo: Motor backward (speed -35)");
           duploHub.setMotorSpeed(-35);
           break;
           
         case 5:
-          Serial.println("Demo: Stop motor - demo complete");
+          Serial.println("TrainController Demo: Stop motor - demo complete");
           duploHub.stopMotor();
           duploHub.setLedColor(GREEN); // Set to green to indicate completion
           demoStep = -1; // Will be incremented to 0, restarting the demo

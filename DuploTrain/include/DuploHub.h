@@ -10,9 +10,37 @@
 #define DUPLO_HUB_H
 
 #include "Lpf2Hub.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "freertos/queue.h"
 
 // Callback function types
 typedef void (*ConnectionCallback)();
+
+// Command types for thread-safe communication
+enum CommandType {
+    CMD_MOTOR_SPEED,
+    CMD_STOP_MOTOR,
+    CMD_SET_LED_COLOR,
+    CMD_SET_HUB_NAME
+};
+
+// Command structure for queue communication
+typedef struct {
+    CommandType type;
+    union {
+        struct {
+            int speed;
+        } motor;
+        struct {
+            Color color;
+        } led;
+        struct {
+            char name[32];  // Fixed size for thread safety
+        } hubName;
+    } data;
+} HubCommand;
 
 class DuploHub {
 private:
@@ -20,36 +48,68 @@ private:
     byte motorPort;
     bool wasConnected;  // Track previous connection state
     
+    // Thread-safe state variables
+    volatile bool connectionState;
+    volatile bool connectingState;
+    
+    // FreeRTOS synchronization objects
+    SemaphoreHandle_t connectionMutex;
+    QueueHandle_t commandQueue;
+    TaskHandle_t bleTaskHandle;
+    
     // Callback functions
     ConnectionCallback onConnectedCallback;
     ConnectionCallback onDisconnectedCallback;
     
+    // Private methods for task management
+    void initFreeRTOS();
+    void cleanupFreeRTOS();
+    void updateConnectionState(bool connected, bool connecting);
+    void processCommandQueue();
+    static void bleTaskWrapper(void* parameter);
+    void bleTaskFunction();
+
+protected:
+    // Thread-safe implementation methods (used internally)
+    void setHubName_ThreadSafe(const char* name);
+    void setLedColor_ThreadSafe(Color color);
+    void setMotorSpeed_ThreadSafe(int speed);
+    void stopMotor_ThreadSafe();
+    
 public:
-    // Constructor
+    // Constructor & Destructor
     DuploHub();
     DuploHub(byte port);
+    ~DuploHub();  // Destructor for cleanup
     
     // Initialization and connection management
     void init();
     void init(const std::string& address);
     bool connect();
-    bool isConnected();
-    bool isConnecting();
-    bool isDisconnected();
+    bool isConnected();           // Thread-safe version
+    bool isConnecting();          // Thread-safe version
+    bool isDisconnected();        // Thread-safe version
+    
+    // Task management
+    void startBLETask();
+    void stopBLETask();
+    void updateBLE();             // Called from BLE task
+    bool isBLETaskRunning();
+    void ensureBLETaskRunning();  // Auto-recovery mechanism
     
     // Hub information and settings
-    void setHubName(const char* name);
     std::string getHubAddress();
     std::string getHubName();
     
-    // LED control
-    void setLedColor(Color color);
-    
     // Motor control
-    void setMotorSpeed(int speed);
-    void stopMotor();
     void setMotorPort(byte port);
     byte getMotorPort();
+    
+    // Legacy methods (for backward compatibility)
+    void setHubName(const char* name) { setHubName_ThreadSafe(name); }
+    void setLedColor(Color color) { setLedColor_ThreadSafe(color); }
+    void setMotorSpeed(int speed) { setMotorSpeed_ThreadSafe(speed); }
+    void stopMotor() { stopMotor_ThreadSafe(); }
     
     // Callback registration
     void setOnConnectedCallback(ConnectionCallback callback);
