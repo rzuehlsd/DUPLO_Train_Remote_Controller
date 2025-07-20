@@ -6,15 +6,16 @@
  * 
  */
 
+#include "Arduino.h"
 #include "DuploHub.h"
 
 // Default constructor
-DuploHub::DuploHub() : motorPort((byte)PoweredUpHubPort::A), wasConnected(false), 
+DuploHub::DuploHub() : motorPort((byte)PoweredUpHubPort::A), wasConnected(false),
                        onConnectedCallback(nullptr), onDisconnectedCallback(nullptr) {
 }
 
 // Constructor with port specification
-DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false), 
+DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false),
                                 onConnectedCallback(nullptr), onDisconnectedCallback(nullptr) {
 }
 
@@ -113,8 +114,17 @@ void DuploHub::setOnDisconnectedCallback(ConnectionCallback callback) {
 
 // Main update method - handles connection logic
 void DuploHub::update() {
+    static bool wasEverConnected = false;  // Local static variable to track if we ever had a connection
+    
     // Initialize if not connected and not connecting
     if (isDisconnected()) {
+        if (!wasEverConnected) {
+            // First time trying to connect
+            Serial.println("Attempting initial connection to hub...");
+        } else {
+            // Attempting to reconnect after previous connection was lost
+            Serial.println("Attempting to reconnect to hub...");
+        }
         hub.init();
     }
     
@@ -128,6 +138,7 @@ void DuploHub::update() {
     
     if (currentlyConnected && !wasConnected) {
         // Connection established
+        wasEverConnected = true;  // Mark that we've had at least one successful connection
         Serial.println("Train hub is connected");
         if (onConnectedCallback != nullptr) {
             onConnectedCallback();
