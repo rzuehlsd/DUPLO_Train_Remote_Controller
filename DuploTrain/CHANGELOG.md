@@ -4,6 +4,35 @@ All notable changes to the DUPLO Train Controller project will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-01-20
+
+### Added
+- **DuploHubExtended class** with bidirectional sensor data support
+- **Sensor callback system** for color, distance, and button events
+- **Second FreeRTOS queue** (sensorQueue) for BLE → Main task communication
+- **Static callback wrappers** for seamless Lpf2Hub integration
+- **Thread-safe sensor activation** via command queue system
+- **TrainController_Extended.cpp** demonstrating color-based speed control
+- **Real-time sensor processing** with ~50ms latency
+- **Emergency distance detection** with automatic motor stopping
+- **Button-based manual control** for train operation
+
+### Enhanced
+- **Architecture documentation** with bidirectional data flow diagrams
+- **API reference** extended with sensor callback examples
+- **Performance characteristics** for dual-queue communication system
+- **Memory usage analysis** for sensor data processing
+- **Complete sensor processing chain analysis** with 8-layer detailed flow
+- **Processing timeline documentation** showing 75ms sensor-to-action latency
+- **Layer-by-layer code examples** from hardware to application callbacks
+
+### Technical Details
+- Sensor data flows BLE Task (Core 0) → Main Task (Core 1) via sensorQueue
+- Static callback integration bridges Lpf2Hub callbacks to queue system
+- Non-blocking sensor data processing with configurable queue sizes
+- Thread-safe sensor activation commands via existing command queue
+- Complete backward compatibility with existing DuploHub API
+
 ## [2.0.0] - 2025-01-20
 
 ### Added

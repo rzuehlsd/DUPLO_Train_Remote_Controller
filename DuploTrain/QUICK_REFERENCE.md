@@ -36,6 +36,7 @@ duploHub.isConnecting()      // true during connection attempt
 
 ## 🎛️ Essential API Calls
 
+### Basic Motor & LED Control
 ```cpp
 // Setup (call once in setup())
 duploHub.startBLETask();
@@ -48,6 +49,32 @@ duploHub.stopMotor();           // stop immediately
 duploHub.setLedColor(RED);      // change LED color
 
 // Monitoring (call in main loop)
+duploHub.update();              // Process callbacks & sensor data
+```
+
+### Sensor Integration (Extended Version)
+```cpp
+// Use DuploHubExtended for sensor support
+DuploHubExtended duploHub;
+
+// Setup sensor callbacks
+duploHub.setOnColorSensorCallback(onColor);
+duploHub.setOnDistanceSensorCallback(onDistance);
+duploHub.setOnButtonCallback(onButton);
+
+// Activate sensors
+duploHub.activateColorSensor((byte)PoweredUpHubPort::B);
+duploHub.activateButton();
+
+// Callback examples
+void onColor(int color, byte port) {
+    if (color == (byte)Color::RED) duploHub.stopMotor();
+}
+
+void onDistance(int distance, byte port) {
+    if (distance < 5) duploHub.stopMotor();  // Emergency stop
+}
+```
 duploHub.update();              // handle callbacks
 ```
 
