@@ -20,6 +20,7 @@
  */
 
 #include "DuploHub.h"
+#include "SystemMemory.h"
 
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
@@ -65,18 +66,42 @@ void onHubDisconnected() {
     Serial.println("TrainController: Train demo stopped due to disconnection");
 }
 
+// Custom BLE task function
+void bleTaskFunction(void *param) {
+    while (true) {
+        // Perform BLE operations
+        duploHub.update();
+
+        // Yield control to avoid watchdog resets
+        vTaskDelay(1000 / portTICK_PERIOD_MS); // Yield for 10ms
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     delay(5000);
+
     Serial.println("TrainController (2 Core) : Starting up...");
-    
+    Serial.println();
+    printMemoryInfo();
+
+    delay(1000);
+
     // Register connection event callbacks
     duploHub.setOnConnectedCallback(onHubConnected);
     duploHub.setOnDisconnectedCallback(onHubDisconnected);
-    
+
     // Start the BLE task for background connection management
-    duploHub.startBLETask();
-    
+    xTaskCreatePinnedToCore(
+        bleTaskFunction,  // Task function
+        "BLE Task",       // Task name
+        4096,             // Stack size (increase if needed)
+        NULL,             // Parameters
+        1,                // Priority
+        NULL,             // Task handle
+        0                 // Core 0
+    );
+
     delay(2000); // Allow time for BLE task to initialize
     Serial.println("TrainController: Ready - BLE task running, waiting for hub connection...");
 } 
@@ -86,10 +111,10 @@ void setup() {
 void loop() {
   // Handle connection callbacks (non-blocking)
   duploHub.update();
-  
+
   // Optional: Show system status periodically
   static unsigned long lastStatusUpdate = 0;
-  if (millis() - lastStatusUpdate > 10000) { // Every 10 seconds
+  if (millis() - lastStatusUpdate > 30000) { // Every 30 seconds
     Serial.print("TrainController Status - BLE Task: ");
     Serial.print(duploHub.isBLETaskRunning() ? "Running" : "Stopped");
     Serial.print(", Hub Connected: ");
@@ -102,47 +127,66 @@ void loop() {
   // Run train demo sequence if connected and demo is active
   if (duploHub.isConnected() && demoRunning) {
     unsigned long currentTime = millis();
-    
+
     // Check if it's time for the next demo step
     if (currentTime - lastDemoStep >= DEMO_STEP_DURATION) {
       lastDemoStep = currentTime;
-      
+
       switch (demoStep) {
         case 0:
           Serial.println("TrainController Demo: Setting LED to GREEN");
           duploHub.setLedColor(GREEN);
           break;
-          
+
         case 1:
           Serial.println("TrainController Demo: Setting LED to RED");
           duploHub.setLedColor(RED);
           break;
-          
+
         case 2:
           Serial.println("TrainController Demo: Motor forward (speed 35)");
           duploHub.setMotorSpeed(35);
           break;
-          
+
         case 3:
           Serial.println("TrainController Demo: Stop motor");
           duploHub.stopMotor();
           break;
-          
+
         case 4:
           Serial.println("TrainController Demo: Motor backward (speed -35)");
           duploHub.setMotorSpeed(-35);
           break;
-          
+
         case 5:
           Serial.println("TrainController Demo: Stop motor - demo complete");
           duploHub.stopMotor();
           duploHub.setLedColor(GREEN); // Set to green to indicate completion
+          break;
+
+        case 6:
+          Serial.println("TrainController Demo: Playing sound - HORN");
+          duploHub.playSound(HORN);
+          break;
+
+        case 7:
+          Serial.println("TrainController Demo: Playing sound - BELL");
+          duploHub.playSound(BRAKE);
           demoStep = -1; // Will be incremented to 0, restarting the demo
           break;
       }
-      
+
       demoStep++;
     }
   }
-  
+
+  static unsigned long lastTempCheck = 0;
+  if (millis() - lastTempCheck >= 5000) { // Every 5 seconds
+    lastTempCheck = millis();
+    float cpuTemp = getCPUTemperature();
+    Serial.println("CPU Temperature: " + String(cpuTemp) + " °C");
+  }
+
+
+  vTaskDelay(100 / portTICK_PERIOD_MS); // Add a small delay to reduce CPU load
 } // End of loop

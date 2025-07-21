@@ -23,7 +23,8 @@ enum CommandType {
     CMD_MOTOR_SPEED,
     CMD_STOP_MOTOR,
     CMD_SET_LED_COLOR,
-    CMD_SET_HUB_NAME
+    CMD_SET_HUB_NAME,
+    CMD_PLAY_SOUND
 };
 
 // Command structure for queue communication
@@ -39,8 +40,20 @@ typedef struct {
         struct {
             char name[32];  // Fixed size for thread safety
         } hubName;
+        struct {
+            int soundId;
+        } sound;
     } data;
 } HubCommand;
+
+// Enum for available Duplo sounds
+enum DuploSound {
+    BRAKE = 3,
+    STATION_DEPARTURE = 5,
+    WATER_REFILL = 7,
+    HORN = 9,
+    STEAM = 10
+};
 
 class DuploHub {
 private:
@@ -75,6 +88,7 @@ protected:
     void setLedColor_ThreadSafe(Color color);
     void setMotorSpeed_ThreadSafe(int speed);
     void stopMotor_ThreadSafe();
+    void playSound_ThreadSafe(int soundId);
     
 public:
     // Constructor & Destructor
@@ -110,6 +124,7 @@ public:
     void setLedColor(Color color) { setLedColor_ThreadSafe(color); }
     void setMotorSpeed(int speed) { setMotorSpeed_ThreadSafe(speed); }
     void stopMotor() { stopMotor_ThreadSafe(); }
+    void playSound(int soundId) {playSound_ThreadSafe(soundId);};
     
     // Callback registration
     void setOnConnectedCallback(ConnectionCallback callback);

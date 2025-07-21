@@ -200,6 +200,22 @@ void DuploHub::stopMotor_ThreadSafe() {
     }
 }
 
+
+// Play a sound on the Duplo Hub (thread-safe)
+void DuploHub::playSound_ThreadSafe(int soundId) {
+    if (commandQueue != nullptr) {
+        HubCommand cmd;
+        cmd.type = CMD_PLAY_SOUND;
+        cmd.data.sound.soundId = soundId;
+
+        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
+            Serial.println("WARNING: Failed to queue play sound command");
+        }
+    } else {
+        Serial.println("ERROR: Command queue not initialized");
+    }
+}
+
 // Set motor port
 void DuploHub::setMotorPort(byte port) {
     motorPort = port;
@@ -373,6 +389,12 @@ void DuploHub::processCommandQueue() {
                 Serial.print("BLE Task: Setting hub name to ");
                 Serial.println(cmd.data.hubName.name);
                 hub.setHubName(cmd.data.hubName.name);
+                break;
+                
+            case CMD_PLAY_SOUND:
+                Serial.print("BLE Task: Playing sound with ID ");
+                Serial.println(cmd.data.sound.soundId);
+                hub.playSound(cmd.data.sound.soundId);
                 break;
                 
             default:

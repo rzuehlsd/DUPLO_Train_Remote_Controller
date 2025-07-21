@@ -13,7 +13,7 @@
  */
 
 #include "Arduino.h"
-#include "DuploHub_Extended.h"
+#include "DuploHubExtended.h"
 
 // Global pointer for static callback access (alternative: use user data pointer)
 static DuploHubExtended* g_duploHubInstance = nullptr;

@@ -19,7 +19,7 @@
  * 
  */
 
-#include "DuploHub_Extended.h"
+#include "DuploHubExtended.h"
 
 // Extended TrainController instance with sensor support
 DuploHubExtended duploHub;
