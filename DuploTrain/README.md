@@ -37,6 +37,7 @@ SENSOR FLOW:  BLE → Main (sensor data, button presses)
 
 ## 📋 Table of Contents
 
+- [Branch Information](#branch-information)
 - [Overview](#overview)
 - [System Architecture](#system-architecture)
 - [Features](#features)
@@ -48,6 +49,36 @@ SENSOR FLOW:  BLE → Main (sensor data, button presses)
 - [System Monitoring](#system-monitoring)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
+
+## Branch Information
+
+### Available Versions
+- **`feature/multi-core-implementation`**: Basic multi-task architecture
+  - ✅ FreeRTOS dual-core implementation
+  - ✅ Non-blocking BLE operations
+  - ✅ Basic motor and LED control
+  - ❌ No sensor support
+
+- **`feature/extended-sensor-support`**: Full sensor integration
+  - ✅ All basic features
+  - ✅ Color sensor with speed control
+  - ✅ Distance sensor with emergency stop
+  - ✅ Button sensor for manual control
+  - ✅ Bidirectional sensor data processing
+
+### Quick Testing
+```bash
+# Test basic version
+git checkout feature/multi-core-implementation
+pio run --target upload
+
+# Test extended version  
+git checkout feature/extended-sensor-support
+pio run --target upload
+
+# Or use the automated script
+./test_versions.sh
+```
 - [Contributing](#contributing)
 - [License](#license)
 
