@@ -67,8 +67,8 @@ void onHubDisconnected() {
 
 void setup() {
     Serial.begin(115200);
-    
-    Serial.println("TrainController: Starting up...");
+    delay(5000);
+    Serial.println("TrainController (2 Core) : Starting up...");
     
     // Register connection event callbacks
     duploHub.setOnConnectedCallback(onHubConnected);
@@ -77,6 +77,7 @@ void setup() {
     // Start the BLE task for background connection management
     duploHub.startBLETask();
     
+    delay(2000); // Allow time for BLE task to initialize
     Serial.println("TrainController: Ready - BLE task running, waiting for hub connection...");
 } 
 
