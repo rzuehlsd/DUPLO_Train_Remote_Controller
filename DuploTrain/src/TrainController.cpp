@@ -12,11 +12,18 @@
  * - Non-blocking demo sequence running in main loop (Core 1)
  * - Automatic connection management and recovery
  * - Real-time status monitoring and logging
- * - Thread-safe command queuing for motor and LED control
+ * - Thread-safe command queuing for motor, LED, and sound control
+ * - Sound tests integrated into the demo sequence
+ * - Optimized BLE task responsiveness and reduced latency
+ * - Improved sound playback timing
+ * 
+ * Demo Sequence:
+ * - LED color changes (GREEN, RED)
+ * - Motor control (forward, backward, stop)
+ * - Sound playback (HORN, BELL)
  * 
  * (c) Copyright 2025
  * Released under MIT License
- * 
  */
 
 #include "DuploHub.h"
@@ -29,7 +36,7 @@ DuploHub duploHub;
 bool demoRunning = false;
 unsigned long lastDemoStep = 0;
 int demoStep = 0;
-const unsigned long DEMO_STEP_DURATION = 1000; // 1 second per step
+const unsigned long DEMO_STEP_DURATION = 5000; // 1 second per step
 
 // Callback function when hub connects
 void onHubConnected() {

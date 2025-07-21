@@ -6,7 +6,8 @@
  * This source file provides the implementation of functions declared in SystemMemory.h. These
  * functions include utilities to print memory information and retrieve the amount of free heap,
  * SPIRAM, and flash memory available on the device. These utilities are useful for debugging and
- * monitoring system resource usage.
+ * monitoring system resource usage. Additionally, it includes functionality to monitor CPU
+ * temperature in real-time.
  * 
  * Author: Ralf Zühlsdorff
  * Date: 21. Juli 2025

@@ -48,6 +48,10 @@ duploHub.setMotorSpeed(-50);    // 50% backward
 duploHub.stopMotor();           // stop immediately
 duploHub.setLedColor(RED);      // change LED color
 
+// New API Methods
+duploHub.playSound(HORN);       // Play horn sound
+duploHub.playSound(BELL);       // Play bell sound
+
 // Monitoring (call in main loop)
 duploHub.update();              // Process callbacks & sensor data
 ```

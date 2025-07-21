@@ -1,9 +1,13 @@
 /**
  * DuploHub - A class to encapsulate LEGO DUPLO Train Hub functionality
  * 
+ * Features:
+ * - Thread-safe command queuing for motor, LED, and sound control
+ * - Optimized BLE task responsiveness and reduced latency
+ * - Automatic connection management and recovery
+ * 
  * (c) Copyright 2025
  * Released under MIT License
- * 
  */
 
 #include "Arduino.h"
