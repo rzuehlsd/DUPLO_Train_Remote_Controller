@@ -18,24 +18,50 @@
 // Callback function types
 typedef void (*ConnectionCallback)();
 
-// Command types for thread-safe communication
-enum CommandType {
-    CMD_MOTOR_SPEED,
-    CMD_STOP_MOTOR,
-    CMD_SET_LED_COLOR,
-    CMD_SET_HUB_NAME,
-    CMD_PLAY_SOUND
-};
+namespace DuploEnums {
+    // Command types for thread-safe communication
+    enum CommandType {
+        CMD_MOTOR_SPEED,
+        CMD_STOP_MOTOR,
+        CMD_SET_LED_COLOR,
+        CMD_SET_HUB_NAME,
+        CMD_PLAY_SOUND
+    };
+
+    // Enum for available Duplo sounds
+    enum DuploSound {
+        BRAKE = 3,
+        STATION_DEPARTURE = 5,
+        WATER_REFILL = 7,
+        HORN = 9,
+        STEAM = 10
+    };
+
+    // Enum for available Duplo colors
+    enum DuploColor {
+        BLACK = 0,
+        PINK = 1,
+        PURPLE = 2,
+        BLUE = 3,
+        LIGHT_BLUE = 4,
+        CYAN = 5,
+        GREEN = 6,
+        YELLOW = 7,
+        ORANGE = 8,
+        RED = 9,
+        WHITE = 10
+    };
+}
 
 // Command structure for queue communication
 typedef struct {
-    CommandType type;
+    DuploEnums::CommandType type;
     union {
         struct {
             int speed;
         } motor;
         struct {
-            Color color;
+            DuploEnums::DuploColor color;
         } led;
         struct {
             char name[32];  // Fixed size for thread safety
@@ -45,15 +71,6 @@ typedef struct {
         } sound;
     } data;
 } HubCommand;
-
-// Enum for available Duplo sounds
-enum DuploSound {
-    BRAKE = 3,
-    STATION_DEPARTURE = 5,
-    WATER_REFILL = 7,
-    HORN = 9,
-    STEAM = 10
-};
 
 class DuploHub {
 private:
@@ -85,7 +102,7 @@ private:
 protected:
     // Thread-safe implementation methods (used internally)
     void setHubName_ThreadSafe(const char* name);
-    void setLedColor_ThreadSafe(Color color);
+    void setLedColor_ThreadSafe(DuploEnums::DuploColor color);
     void setMotorSpeed_ThreadSafe(int speed);
     void stopMotor_ThreadSafe();
     void playSound_ThreadSafe(int soundId);
@@ -121,10 +138,10 @@ public:
     
     // Legacy methods (for backward compatibility)
     void setHubName(const char* name) { setHubName_ThreadSafe(name); }
-    void setLedColor(Color color) { setLedColor_ThreadSafe(color); }
+    void setLedColor(DuploEnums::DuploColor color)  { setLedColor_ThreadSafe(color); }
     void setMotorSpeed(int speed) { setMotorSpeed_ThreadSafe(speed); }
     void stopMotor() { stopMotor_ThreadSafe(); }
-    void playSound(int soundId) {playSound_ThreadSafe(soundId);};
+    void playSound(int soundId) { playSound_ThreadSafe(soundId); };
     
     // Callback registration
     void setOnConnectedCallback(ConnectionCallback callback);

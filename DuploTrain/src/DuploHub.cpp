@@ -132,7 +132,7 @@ bool DuploHub::isDisconnected() {
 void DuploHub::setHubName_ThreadSafe(const char* name) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
-        cmd.type = CMD_SET_HUB_NAME;
+        cmd.type = DuploEnums::CMD_SET_HUB_NAME;
         strncpy(cmd.data.hubName.name, name, sizeof(cmd.data.hubName.name) - 1);
         cmd.data.hubName.name[sizeof(cmd.data.hubName.name) - 1] = '\0'; // Ensure null termination
         
@@ -158,18 +158,17 @@ std::string DuploHub::getHubName() {
 }
 
 // Set LED color (thread-safe)
-void DuploHub::setLedColor_ThreadSafe(Color color) {
+void DuploHub::setLedColor_ThreadSafe(DuploEnums::DuploColor color) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
-        cmd.type = CMD_SET_LED_COLOR;
-        cmd.data.led.color = color;
+        cmd.type = DuploEnums::CMD_SET_LED_COLOR;
+        cmd.data.led.color = (DuploEnums::DuploColor) color;
         
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
             Serial.println("WARNING: Failed to queue LED color command");
         }
     } else {
-        // Fallback to direct call if queue not initialized
-        hub.setLedColor(color);
+        Serial.println("ERROR: Command queue is not initialized");
     }
 }
 
@@ -177,7 +176,7 @@ void DuploHub::setLedColor_ThreadSafe(Color color) {
 void DuploHub::setMotorSpeed_ThreadSafe(int speed) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
-        cmd.type = CMD_MOTOR_SPEED;
+        cmd.type = DuploEnums::CMD_MOTOR_SPEED;
         cmd.data.motor.speed = speed;
         
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
@@ -195,7 +194,7 @@ void DuploHub::setMotorSpeed_ThreadSafe(int speed) {
 void DuploHub::stopMotor_ThreadSafe() {
     if (commandQueue != nullptr) {
         HubCommand cmd;
-        cmd.type = CMD_STOP_MOTOR;
+        cmd.type = DuploEnums::CMD_STOP_MOTOR;
         
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
             Serial.println("WARNING: Failed to queue stop motor command");
@@ -211,7 +210,7 @@ void DuploHub::stopMotor_ThreadSafe() {
 void DuploHub::playSound_ThreadSafe(int soundId) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
-        cmd.type = CMD_PLAY_SOUND;
+        cmd.type = DuploEnums::CMD_PLAY_SOUND;
         cmd.data.sound.soundId = soundId;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
@@ -374,7 +373,7 @@ void DuploHub::processCommandQueue() {
         }
         
         switch (cmd.type) {
-            case CMD_MOTOR_SPEED:
+            case DuploEnums::CMD_MOTOR_SPEED:
                 Serial.print("BLE Task: Setting motor speed to ");
                 Serial.println(cmd.data.motor.speed);
                 Serial.flush();
@@ -384,24 +383,28 @@ void DuploHub::processCommandQueue() {
                 Serial.flush();
                 break;
                 
-            case CMD_STOP_MOTOR:
+            case DuploEnums::CMD_STOP_MOTOR:
                 Serial.println("BLE Task: Stopping motor");
                 hub.stopBasicMotor(motorPort);
                 break;
                 
-            case CMD_SET_LED_COLOR:
+            case DuploEnums::CMD_SET_LED_COLOR:
                 Serial.print("BLE Task: Setting LED color to ");
                 Serial.println(cmd.data.led.color);
-                hub.setLedColor(cmd.data.led.color);
+                Serial.flush();
+                hub.setLedColor((Color)cmd.data.led.color);
+                Serial.print("DuploHub: setLEDColor completed at: ");
+                Serial.println(millis());
+                Serial.flush();
                 break;
                 
-            case CMD_SET_HUB_NAME:
+            case DuploEnums::CMD_SET_HUB_NAME:
                 Serial.print("BLE Task: Setting hub name to ");
                 Serial.println(cmd.data.hubName.name);
                 hub.setHubName(cmd.data.hubName.name);
                 break;
                 
-            case CMD_PLAY_SOUND:
+            case DuploEnums::CMD_PLAY_SOUND:
                 Serial.print("BLE Task: Playing sound with ID ");
                 Serial.println(cmd.data.sound.soundId);
                 Serial.flush();

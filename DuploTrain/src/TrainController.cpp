@@ -30,7 +30,7 @@
 #include "SystemMemory.h"
 
 
-#define TIMING  // Set to enable timing test case
+#define TIMING  1 // Set to enable timing test case
 
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
@@ -117,111 +117,150 @@ void setup() {
 } 
 
 
+void timingMotor(DuploHub& duploHub, bool& demoRunning, int& testCount) {
+    if (duploHub.isConnected() && (testCount < 5)) {
+        // Execute test case 1
+        unsigned long currentMillis = millis();
+        Serial.print("TrainController: setMotorSpeed called at: ");
+        Serial.println(currentMillis);
+        Serial.println("TrainController Demo: Motor forward (speed 35)");
+        duploHub.setMotorSpeed(35);
+
+        // Delay for 5 seconds
+        delay(5000);
+
+        testCount++;
+    }
+}
+
+void timingLED(DuploHub& duploHub, bool& demoRunning, int& testCount) {
+    if (duploHub.isConnected() && demoRunning && testCount >= 0 && testCount <= 10) {
+        // Execute test case 2
+        unsigned long currentMillis = millis();
+        Serial.print("TrainController: setLEDColor called at: ");
+        Serial.println(millis());
+        Serial.println("TrainController Demo: Setting LED to RED");
+        duploHub.setLedColor((DuploEnums::DuploColor)(testCount)); // Cycle through colors for testing
+
+        // Delay for 5 seconds
+        delay(5000);
+
+        testCount++;
+    }
+}
+
+void duploHubDemo(DuploHub& duploHub, bool& demoRunning, unsigned long& lastDemoStep, int& demoStep) {
+
+  if (duploHub.isConnected() && demoRunning) {
+        unsigned long currentTime = millis();
+
+        // Check if it's time for the next demo step
+        if (currentTime - lastDemoStep >= DEMO_STEP_DURATION) {
+            lastDemoStep = currentTime;
+
+            switch (demoStep) {
+                case 0:
+                    Serial.println("TrainController Demo: Setting LED to GREEN");
+                    duploHub.setLedColor(DuploEnums::DuploColor::GREEN);
+                    break;
+
+                case 1:
+                    Serial.println("TrainController Demo: Setting LED to RED");
+                    duploHub.setLedColor(DuploEnums::DuploColor::RED);
+                    break;
+
+                case 2:
+                    Serial.print("TrainController: setMotorSpeed called at: ");
+                    Serial.println(millis());
+                    Serial.println("TrainController Demo: Motor forward (speed 35)");
+                    duploHub.setMotorSpeed(35);
+                    break;
+
+                case 3:
+                    Serial.println("TrainController Demo: Stop motor");
+                    duploHub.stopMotor();
+                    break;
+
+                case 4:
+                    Serial.println("TrainController Demo: Motor backward (speed -35)");
+                    duploHub.setMotorSpeed(-35);
+                    break;
+
+                case 5:
+                    Serial.println("TrainController Demo: Stop motor - demo complete");
+                    duploHub.stopMotor();
+                    duploHub.setLedColor(DuploEnums::DuploColor::GREEN); // Set to green to indicate completion
+                    break;
+
+                case 6:
+                    Serial.println("TrainController Demo: Playing sound - HORN");
+                    duploHub.playSound(DuploEnums::DuploSound::HORN);
+                    break;
+
+                case 7:
+                    Serial.println("TrainController Demo: Playing sound - BELL");
+                    duploHub.playSound(DuploEnums::DuploSound::BRAKE);
+                    demoStep = -1; // Will be incremented to 0, restarting the demo
+                    break;
+            }
+
+            demoStep++;
+        }
+    }
+}
+
+void checkMCUTemp() {
+    static unsigned long lastTempCheck = 0;
+    if (millis() - lastTempCheck >= 5000) { // Every 5 seconds
+        lastTempCheck = millis();
+        float cpuTemp = getCPUTemperature();
+        Serial.println("CPU Temperature: " + String(cpuTemp) + " °C");
+    }
+}
+
+void checkMCUStatus(DuploHub& duploHub, bool demoRunning) {
+    static unsigned long lastStatusUpdate = 0;
+    if (millis() - lastStatusUpdate > 30000) { // Every 30 seconds
+        Serial.print("TrainController Status - BLE Task: ");
+        Serial.print(duploHub.isBLETaskRunning() ? "Running" : "Stopped");
+        Serial.print(", Hub Connected: ");
+        Serial.print(duploHub.isConnected() ? "Yes" : "No");
+        Serial.print(", Demo Active: ");
+        Serial.println(demoRunning ? "Yes" : "No");
+        lastStatusUpdate = millis();
+    }
+}
+
 // main loop
 void loop() {
-#ifdef TIMING
+
+   // Handle connection callbacks (non-blocking)
+  duploHub.update();
+
+  // Optional: Show system status periodically
+  checkMCUStatus(duploHub, demoRunning);
+
+#if TIMING == 1
   static int testCount = 0;
 
-  if (testCount < 5) {
-    // Execute test case 2
-    unsigned long currentMillis = millis();
-    Serial.print("TrainController: playSound called at: ");
-    Serial.println(millis());
-    Serial.println("TrainController Demo: Playing sound - HORN");
-    duploHub.playSound(HORN);
+  // timingMotor(duploHub, demoRunning, testCount);
+  timingLED(duploHub, demoRunning, testCount);
 
-    // Delay for 5 seconds
-    delay(5000);
-
-    testCount++;
-  } else {
-    Serial.println("TrainController: Test completed.");
+  if (testCount > 10) {
+    Serial.println("TrainController: Timing Test completed.");
     while (true) {
       // Stop execution after completing the test
       delay(1000);
     }
   }
 #else
-  // Handle connection callbacks (non-blocking)
-  duploHub.update();
-
-  // Optional: Show system status periodically
-  static unsigned long lastStatusUpdate = 0;
-  if (millis() - lastStatusUpdate > 30000) { // Every 30 seconds
-    Serial.print("TrainController Status - BLE Task: ");
-    Serial.print(duploHub.isBLETaskRunning() ? "Running" : "Stopped");
-    Serial.print(", Hub Connected: ");
-    Serial.print(duploHub.isConnected() ? "Yes" : "No");
-    Serial.print(", Demo Active: ");
-    Serial.println(demoRunning ? "Yes" : "No");
-    lastStatusUpdate = millis();
-  }
-
+  
   // Run train demo sequence if connected and demo is active
-  if (duploHub.isConnected() && demoRunning) {
-    unsigned long currentTime = millis();
+  duploHubDemo(duploHub, demoRunning, lastDemoStep, demoStep);
+#endif
 
-    // Check if it's time for the next demo step
-    if (currentTime - lastDemoStep >= DEMO_STEP_DURATION) {
-      lastDemoStep = currentTime;
-
-      switch (demoStep) {
-        case 0:
-          Serial.println("TrainController Demo: Setting LED to GREEN");
-          duploHub.setLedColor(GREEN);
-          break;
-
-        case 1:
-          Serial.println("TrainController Demo: Setting LED to RED");
-          duploHub.setLedColor(RED);
-          break;
-
-        case 2:
-          Serial.print("TrainController: setMotorSpeed called at: ");
-          Serial.println(millis());
-          Serial.println("TrainController Demo: Motor forward (speed 35)");
-          duploHub.setMotorSpeed(35);
-          break;
-
-        case 3:
-          Serial.println("TrainController Demo: Stop motor");
-          duploHub.stopMotor();
-          break;
-
-        case 4:
-          Serial.println("TrainController Demo: Motor backward (speed -35)");
-          duploHub.setMotorSpeed(-35);
-          break;
-
-        case 5:
-          Serial.println("TrainController Demo: Stop motor - demo complete");
-          duploHub.stopMotor();
-          duploHub.setLedColor(GREEN); // Set to green to indicate completion
-          break;
-
-        case 6:
-          Serial.println("TrainController Demo: Playing sound - HORN");
-          duploHub.playSound(HORN);
-          break;
-
-        case 7:
-          Serial.println("TrainController Demo: Playing sound - BELL");
-          duploHub.playSound(BRAKE);
-          demoStep = -1; // Will be incremented to 0, restarting the demo
-          break;
-      }
-
-      demoStep++;
-    }
-  }
-
-  static unsigned long lastTempCheck = 0;
-  if (millis() - lastTempCheck >= 5000) { // Every 5 seconds
-    lastTempCheck = millis();
-    float cpuTemp = getCPUTemperature();
-    Serial.println("CPU Temperature: " + String(cpuTemp) + " °C");
-  }
+  checkMCUTemp();
 
   vTaskDelay(100 / portTICK_PERIOD_MS); // Add a small delay to reduce CPU load
-#endif
 } // End of loop
+
