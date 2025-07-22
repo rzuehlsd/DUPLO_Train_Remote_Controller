@@ -133,13 +133,31 @@ void timingMotor(DuploHub& duploHub, bool& demoRunning, int& testCount) {
     }
 }
 
+void timingSound(DuploHub& duploHub, bool& demoRunning, int& testCount) {
+    if (duploHub.isConnected() && (testCount < 10)) {
+        // Execute test case 1
+        unsigned long currentMillis = millis();
+        Serial.print("TrainController: playSound called at: ");
+        Serial.println(currentMillis);
+        Serial.print("TrainController Demo: Playing sound ");
+        Serial.println(3 + testCount);
+        duploHub.playSound((DuploEnums::DuploSound) 3 + testCount); // Cycle through sounds for testing
+
+        // Delay for 5 seconds
+        delay(5000);
+
+        testCount = testCount + 2; // Increment by 2 to skip to the next sound
+    }
+}
+
 void timingLED(DuploHub& duploHub, bool& demoRunning, int& testCount) {
     if (duploHub.isConnected() && demoRunning && testCount >= 0 && testCount <= 10) {
         // Execute test case 2
         unsigned long currentMillis = millis();
         Serial.print("TrainController: setLEDColor called at: ");
         Serial.println(millis());
-        Serial.println("TrainController Demo: Setting LED to RED");
+        Serial.print("TrainController Demo: Setting LED to color ");
+        Serial.println(testCount);
         duploHub.setLedColor((DuploEnums::DuploColor)(testCount)); // Cycle through colors for testing
 
         // Delay for 5 seconds
@@ -244,7 +262,8 @@ void loop() {
   static int testCount = 0;
 
   // timingMotor(duploHub, demoRunning, testCount);
-  timingLED(duploHub, demoRunning, testCount);
+  // timingLED(duploHub, demoRunning, testCount);
+  timingSound(duploHub, demoRunning, testCount);
 
   if (testCount > 10) {
     Serial.println("TrainController: Timing Test completed.");
