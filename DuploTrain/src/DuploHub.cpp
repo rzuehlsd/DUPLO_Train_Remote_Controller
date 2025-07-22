@@ -186,6 +186,8 @@ void DuploHub::setMotorSpeed_ThreadSafe(int speed) {
     } else {
         // Fallback to direct call if queue not initialized
         hub.setBasicMotorSpeed(motorPort, speed);
+        Serial.print("DuploHub: setBasicMotorSpeed executed at: ");
+        Serial.println(millis());
     }
 }
 
@@ -375,7 +377,11 @@ void DuploHub::processCommandQueue() {
             case CMD_MOTOR_SPEED:
                 Serial.print("BLE Task: Setting motor speed to ");
                 Serial.println(cmd.data.motor.speed);
+                Serial.flush();
                 hub.setBasicMotorSpeed(motorPort, cmd.data.motor.speed);
+                Serial.print("DuploHub: setBasicMotorSpeed completed at: ");
+                Serial.println(millis());
+                Serial.flush();
                 break;
                 
             case CMD_STOP_MOTOR:
@@ -398,7 +404,11 @@ void DuploHub::processCommandQueue() {
             case CMD_PLAY_SOUND:
                 Serial.print("BLE Task: Playing sound with ID ");
                 Serial.println(cmd.data.sound.soundId);
+                Serial.flush();
                 hub.playSound(cmd.data.sound.soundId);
+                Serial.print("DuploHub: playSound completed at: ");
+                Serial.println(millis());
+                Serial.flush();
                 break;
                 
             default:

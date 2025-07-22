@@ -29,6 +29,9 @@
 #include "DuploHub.h"
 #include "SystemMemory.h"
 
+
+#define TIMING  // Set to enable timing test case
+
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
 
@@ -80,7 +83,7 @@ void bleTaskFunction(void *param) {
         duploHub.update();
 
         // Yield control to avoid watchdog resets
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // Yield for 10ms
+        vTaskDelay(100 / portTICK_PERIOD_MS); // Yield for 10ms
     }
 }
 
@@ -116,6 +119,29 @@ void setup() {
 
 // main loop
 void loop() {
+#ifdef TIMING
+  static int testCount = 0;
+
+  if (testCount < 5) {
+    // Execute test case 2
+    unsigned long currentMillis = millis();
+    Serial.print("TrainController: playSound called at: ");
+    Serial.println(millis());
+    Serial.println("TrainController Demo: Playing sound - HORN");
+    duploHub.playSound(HORN);
+
+    // Delay for 5 seconds
+    delay(5000);
+
+    testCount++;
+  } else {
+    Serial.println("TrainController: Test completed.");
+    while (true) {
+      // Stop execution after completing the test
+      delay(1000);
+    }
+  }
+#else
   // Handle connection callbacks (non-blocking)
   duploHub.update();
 
@@ -151,6 +177,8 @@ void loop() {
           break;
 
         case 2:
+          Serial.print("TrainController: setMotorSpeed called at: ");
+          Serial.println(millis());
           Serial.println("TrainController Demo: Motor forward (speed 35)");
           duploHub.setMotorSpeed(35);
           break;
@@ -194,6 +222,6 @@ void loop() {
     Serial.println("CPU Temperature: " + String(cpuTemp) + " °C");
   }
 
-
   vTaskDelay(100 / portTICK_PERIOD_MS); // Add a small delay to reduce CPU load
+#endif
 } // End of loop
