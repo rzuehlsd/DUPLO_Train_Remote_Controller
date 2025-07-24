@@ -117,6 +117,27 @@ void setup() {
 } 
 
 
+
+// Function to process the responseQueue and print detected color
+void detectedColorCb(DuploEnums::DuploColor color) {
+    Serial.print("TrainController:  Detected Color: ");
+    Serial.println(color);
+}
+
+
+void activateInstance() {
+    duploHub.activateRgbLight();
+    delay(200);
+    duploHub.activateBaseSpeaker();
+    delay(200);
+    duploHub.activateColorSensor();
+    delay(200);
+
+    // Add a public function to register the callback
+    duploHub.setDetectedColorCallback(detectedColorCb);
+}
+
+
 void timingMotor(DuploHub& duploHub, bool& demoRunning, int& testCount) {
     if (duploHub.isConnected() && (testCount < 5)) {
         // Execute test case 1
@@ -249,6 +270,9 @@ void checkMCUStatus(DuploHub& duploHub, bool demoRunning) {
     }
 }
 
+
+
+
 // main loop
 void loop() {
 
@@ -258,12 +282,19 @@ void loop() {
   // Optional: Show system status periodically
   checkMCUStatus(duploHub, demoRunning);
 
+  if( duploHub.isConnected()) {
+    activateInstance(); // Activate RGB light and speaker when connected
+    delay(1000); // Allow time for activation
+    Serial.println("TrainController: Hub instance activated, starting demo sequence...");
+    demoRunning = true; // Start demo sequence
+  }
+
 #if TIMING == 1
   static int testCount = 0;
 
   // timingMotor(duploHub, demoRunning, testCount);
-  // timingLED(duploHub, demoRunning, testCount);
-  timingSound(duploHub, demoRunning, testCount);
+  timingLED(duploHub, demoRunning, testCount);
+  // timingSound(duploHub, demoRunning, testCount);
 
   if (testCount > 10) {
     Serial.println("TrainController: Timing Test completed.");
@@ -273,11 +304,13 @@ void loop() {
     }
   }
 #else
-  
   // Run train demo sequence if connected and demo is active
   duploHubDemo(duploHub, demoRunning, lastDemoStep, demoStep);
 #endif
 
+  duploHub.processResponseQueue(); // Process response queue for detected colors
+
+  // Check CPU temperature every 5 seconds
   checkMCUTemp();
 
   vTaskDelay(100 / portTICK_PERIOD_MS); // Add a small delay to reduce CPU load

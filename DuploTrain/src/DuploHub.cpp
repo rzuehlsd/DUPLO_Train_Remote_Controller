@@ -55,19 +55,22 @@ void DuploHub::initFreeRTOS() {
 void DuploHub::cleanupFreeRTOS() {
     // Stop BLE task if running
     stopBLETask();
-    
+
     // Delete mutex
     if (connectionMutex != nullptr) {
         vSemaphoreDelete(connectionMutex);
         connectionMutex = nullptr;
     }
-    
-    // Delete queue
+
+    // Delete command queue
     if (commandQueue != nullptr) {
         vQueueDelete(commandQueue);
         commandQueue = nullptr;
     }
-    
+
+    // Cleanup response queue
+    cleanupResponseQueue();
+
     Serial.println("DuploHub: FreeRTOS objects cleaned up");
 }
 
@@ -129,18 +132,17 @@ bool DuploHub::isDisconnected() {
 }
 
 // Set hub name (thread-safe)
-void DuploHub::setHubName_ThreadSafe(const char* name) {
+void DuploHub::setHubName(const char* name) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
         cmd.type = DuploEnums::CMD_SET_HUB_NAME;
         strncpy(cmd.data.hubName.name, name, sizeof(cmd.data.hubName.name) - 1);
         cmd.data.hubName.name[sizeof(cmd.data.hubName.name) - 1] = '\0'; // Ensure null termination
-        
+
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
             Serial.println("WARNING: Failed to queue hub name command");
         }
     } else {
-        // Fallback to direct call if queue not initialized
         char hubName[strlen(name) + 1];
         strcpy(hubName, name);
         hub.setHubName(hubName);
@@ -158,12 +160,12 @@ std::string DuploHub::getHubName() {
 }
 
 // Set LED color (thread-safe)
-void DuploHub::setLedColor_ThreadSafe(DuploEnums::DuploColor color) {
+void DuploHub::setLedColor(DuploEnums::DuploColor color) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
         cmd.type = DuploEnums::CMD_SET_LED_COLOR;
         cmd.data.led.color = (DuploEnums::DuploColor) color;
-        
+
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
             Serial.println("WARNING: Failed to queue LED color command");
         }
@@ -173,17 +175,16 @@ void DuploHub::setLedColor_ThreadSafe(DuploEnums::DuploColor color) {
 }
 
 // Set motor speed (thread-safe)
-void DuploHub::setMotorSpeed_ThreadSafe(int speed) {
+void DuploHub::setMotorSpeed(int speed) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
         cmd.type = DuploEnums::CMD_MOTOR_SPEED;
         cmd.data.motor.speed = speed;
-        
+
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
             Serial.println("WARNING: Failed to queue motor speed command");
         }
     } else {
-        // Fallback to direct call if queue not initialized
         hub.setBasicMotorSpeed(motorPort, speed);
         Serial.print("DuploHub: setBasicMotorSpeed executed at: ");
         Serial.println(millis());
@@ -191,23 +192,22 @@ void DuploHub::setMotorSpeed_ThreadSafe(int speed) {
 }
 
 // Stop motor (thread-safe)
-void DuploHub::stopMotor_ThreadSafe() {
+void DuploHub::stopMotor() {
     if (commandQueue != nullptr) {
         HubCommand cmd;
         cmd.type = DuploEnums::CMD_STOP_MOTOR;
-        
+
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
             Serial.println("WARNING: Failed to queue stop motor command");
         }
     } else {
-        // Fallback to direct call if queue not initialized
         hub.stopBasicMotor(motorPort);
     }
 }
 
 
 // Play a sound on the Duplo Hub (thread-safe)
-void DuploHub::playSound_ThreadSafe(int soundId) {
+void DuploHub::playSound(int soundId) {
     if (commandQueue != nullptr) {
         HubCommand cmd;
         cmd.type = DuploEnums::CMD_PLAY_SOUND;
@@ -218,6 +218,86 @@ void DuploHub::playSound_ThreadSafe(int soundId) {
         }
     } else {
         Serial.println("ERROR: Command queue not initialized");
+    }
+}
+
+// Activate RGB light (thread-safe)
+void DuploHub::activateRgbLight() {
+    if (commandQueue != nullptr) {
+        HubCommand cmd;
+        cmd.type = DuploEnums::CMD_ACTIVATE_RGB_LIGHT;
+
+        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
+            Serial.println("WARNING: Failed to queue activate RGB light command");
+        }
+    } else {
+        Serial.println("ERROR: Command queue is not initialized");
+    }
+}
+
+// Activate base speaker (thread-safe)
+void DuploHub::activateBaseSpeaker() {
+    if (commandQueue != nullptr) {
+        HubCommand cmd;
+        cmd.type = DuploEnums::CMD_ACTIVATE_BASE_SPEAKER;
+
+        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
+            Serial.println("WARNING: Failed to queue activate base speaker command");
+        }
+    } else {
+        Serial.println("ERROR: Command queue is not initialized");
+    }
+}
+
+// Callback for color sensor updates
+void DuploHub::colorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData) {
+    int detectedColor = 0;
+    if (responseQueue != nullptr) {
+        myLegoHub *myHub = (myLegoHub *)hub;
+        if (deviceType == DeviceType::COLOR_DISTANCE_SENSOR)
+        {
+            detectedColor = myHub->parseColor(pData);
+            Serial.print("Color: ");
+            Serial.println(detectedColor);
+        HubResponse response;
+        response.type = DuploEnums::ResponseType::Detected_Color;
+        response.data.colorResponse.detectedColor = (DuploEnums::DuploColor) detectedColor;
+
+        if (xQueueSend(responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
+            Serial.println("WARNING: Failed to queue color sensor data");
+        }
+        } else {
+            Serial.println("ERROR: Unsupported device type for color sensor callback");
+        }
+    } else {
+        Serial.println("ERROR: Response queue is not initialized");
+    }
+}
+
+// Implement the static wrapper for colorSensorCallback
+void DuploHub::colorSensorCallbackWrapper(void* hubInstance, byte portNumber, DeviceType deviceType, uint8_t* pData) {
+    if (hubInstance != nullptr) {
+        DuploHub* instance = static_cast<DuploHub*>(hubInstance);
+        instance->colorSensorCallback(hubInstance, portNumber, deviceType, pData);
+    }
+}
+
+// Initialize response queue
+void DuploHub::initResponseQueue() {
+    responseQueue = xQueueCreate(10, sizeof(HubResponse)); // Queue size: 10 response entries
+    if (responseQueue == nullptr) {
+        Serial.println("ERROR: Failed to create response queue");
+    } else {
+        Serial.println("DuploHub: Response queue initialized");
+    }
+}
+
+// Cleanup response queue
+void DuploHub::cleanupResponseQueue() {
+    if (responseQueue != nullptr) {
+        vQueueDelete(responseQueue);
+        responseQueue = nullptr;
+        Serial.println("DuploHub: Response queue cleaned up");
     }
 }
 
@@ -239,6 +319,11 @@ void DuploHub::setOnConnectedCallback(ConnectionCallback callback) {
 // Set callback for when hub disconnects
 void DuploHub::setOnDisconnectedCallback(ConnectionCallback callback) {
     onDisconnectedCallback = callback;
+}
+
+// Implement the function to register the detected color callback
+void DuploHub::setDetectedColorCallback(DetectedColorCallback callback) {
+    detectedColorCallback = callback;
 }
 
 // Start BLE task
@@ -296,22 +381,22 @@ void DuploHub::bleTaskWrapper(void* parameter) {
 // BLE task function
 void DuploHub::bleTaskFunction() {
     Serial.println("BLE Task: Started successfully");
-    
+
     unsigned long lastConnectionCheck = 0;
     const unsigned long CONNECTION_CHECK_INTERVAL = 1000; // Check connection every 1 second
-    
+
     while (true) {
         unsigned long currentTime = millis();
-        
+
         // Handle BLE operations at regular intervals
         if (currentTime - lastConnectionCheck >= CONNECTION_CHECK_INTERVAL) {
             updateBLE();
             lastConnectionCheck = currentTime;
         }
-        
+
         // Process command queue more frequently for responsiveness
         processCommandQueue();
-        
+
         // Small delay to prevent task from hogging CPU
         vTaskDelay(pdMS_TO_TICKS(50)); // 50ms delay for good responsiveness
     }
@@ -414,8 +499,46 @@ void DuploHub::processCommandQueue() {
                 Serial.flush();
                 break;
                 
+            case DuploEnums::CMD_ACTIVATE_RGB_LIGHT:
+                Serial.println("BLE Task: Activating RGB light");
+                hub.activateRgbLight();
+                Serial.println("DuploHub: activateRgbLight completed");
+                break;
+
+            case DuploEnums::CMD_ACTIVATE_BASE_SPEAKER:
+                Serial.println("BLE Task: Activating base speaker");
+                hub.activateBaseSpeaker();
+                Serial.println("DuploHub: activateBaseSpeaker completed");
+                break;
+                
             default:
                 Serial.println("BLE Task: Unknown command type");
+                break;
+        }
+    }
+}
+
+// Ensure alignment with the header file by adding support for HubResponse
+void DuploHub::processResponseQueue() {
+    if (responseQueue == nullptr) return;
+
+    HubResponse response;
+
+    // Process all available responses (non-blocking)
+    while (xQueueReceive(responseQueue, &response, 0) == pdTRUE) {
+        switch (response.type) {
+            case DuploEnums::ResponseType::Detected_Color:
+                Serial.print("Detected Color: ");
+                Serial.println(response.data.colorResponse.detectedColor);
+                if (detectedColorCallback != nullptr) {
+                    detectedColorCallback(response.data.colorResponse.detectedColor);
+                }
+                break;
+
+            // Add other response types here as needed
+
+            default:
+                Serial.println("Unknown response type");
                 break;
         }
     }
@@ -451,3 +574,16 @@ void DuploHub::update() {
     // Update the connection state for next iteration
     wasConnected = currentlyConnected;
 }
+
+// Activate the color sensor
+void DuploHub::activateColorSensor() {
+    byte portForDevice = hub.getPortForDeviceType((byte)DeviceType::COLOR_DISTANCE_SENSOR);
+    Serial.println(portForDevice, DEC);
+    if (portForDevice != 255) {
+        Serial.println("activatePortDevice");
+        hub.activatePortDevice(portForDevice, colorSensorCallbackWrapper);
+    } else {
+        Serial.println("ERROR: No valid port found for COLOR_DISTANCE_SENSOR");
+    }
+}
+

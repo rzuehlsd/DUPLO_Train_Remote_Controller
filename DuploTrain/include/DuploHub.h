@@ -9,23 +9,26 @@
 #ifndef DUPLO_HUB_H
 #define DUPLO_HUB_H
 
-#include "Lpf2Hub.h"
+#include "myLegoHub.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
 
-// Callback function types
-typedef void (*ConnectionCallback)();
+
+
 
 namespace DuploEnums {
     // Command types for thread-safe communication
     enum CommandType {
+        CMD_ACTIVATE_RGB_LIGHT,
+        CMD_ACTIVATE_BASE_SPEAKER,
         CMD_MOTOR_SPEED,
         CMD_STOP_MOTOR,
         CMD_SET_LED_COLOR,
         CMD_SET_HUB_NAME,
-        CMD_PLAY_SOUND
+        CMD_PLAY_SOUND,
+        CMD_ACTIVATE_COLOR_SENSOR
     };
 
     // Enum for available Duplo sounds
@@ -51,7 +54,21 @@ namespace DuploEnums {
         RED = 9,
         WHITE = 10
     };
+
+    // Enum for response types
+    enum ResponseType {
+        Detected_Color
+    };
 }
+
+// Callback function types
+typedef void (*ConnectionCallback)();
+
+typedef void (*ColorDistanceSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
+// Add a typedef for the detected color callback
+typedef void (*DetectedColorCallback)(DuploEnums::DuploColor);
+
 
 // Command structure for queue communication
 typedef struct {
@@ -72,9 +89,20 @@ typedef struct {
     } data;
 } HubCommand;
 
+// Response structure for queue communication
+typedef struct {
+    DuploEnums::ResponseType type;
+    union {
+        struct {
+            DuploEnums::DuploColor detectedColor;
+        } colorResponse;
+        // Add other response types here as needed
+    } data;
+} HubResponse;
+
 class DuploHub {
 private:
-    Lpf2Hub hub;
+    myLegoHub hub;
     byte motorPort;
     bool wasConnected;  // Track previous connection state
     
@@ -85,11 +113,13 @@ private:
     // FreeRTOS synchronization objects
     SemaphoreHandle_t connectionMutex;
     QueueHandle_t commandQueue;
+    QueueHandle_t responseQueue;
     TaskHandle_t bleTaskHandle;
     
     // Callback functions
     ConnectionCallback onConnectedCallback;
     ConnectionCallback onDisconnectedCallback;
+    DetectedColorCallback detectedColorCallback;
     
     // Private methods for task management
     void initFreeRTOS();
@@ -98,14 +128,21 @@ private:
     void processCommandQueue();
     static void bleTaskWrapper(void* parameter);
     void bleTaskFunction();
+    
+
+    // Add missing member variables
+    void initResponseQueue();
+    void cleanupResponseQueue();
+
+
 
 protected:
-    // Thread-safe implementation methods (used internally)
-    void setHubName_ThreadSafe(const char* name);
-    void setLedColor_ThreadSafe(DuploEnums::DuploColor color);
-    void setMotorSpeed_ThreadSafe(int speed);
-    void stopMotor_ThreadSafe();
-    void playSound_ThreadSafe(int soundId);
+      
+    // Add declaration for colorSensorCallback to be registered with lpf2hub
+    typedef void (*ColorSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+    static void colorSensorCallbackWrapper(void* hubInstance, byte portNumber, DeviceType deviceType, uint8_t* pData);
+    void colorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+ 
     
 public:
     // Constructor & Destructor
@@ -116,7 +153,8 @@ public:
     // Initialization and connection management
     void init();
     void init(const std::string& address);
-    bool connect();
+
+    bool connect();               // Legacy connect method (deprecated)
     bool isConnected();           // Thread-safe version
     bool isConnecting();          // Thread-safe version
     bool isDisconnected();        // Thread-safe version
@@ -129,24 +167,35 @@ public:
     void ensureBLETaskRunning();  // Auto-recovery mechanism
     
     // Hub information and settings
+    void setHubName(const char* name);
     std::string getHubAddress();
     std::string getHubName();
     
     // Motor control
     void setMotorPort(byte port);
     byte getMotorPort();
+    void setMotorSpeed(int speed);
+    void stopMotor();
     
-    // Legacy methods (for backward compatibility)
-    void setHubName(const char* name) { setHubName_ThreadSafe(name); }
-    void setLedColor(DuploEnums::DuploColor color)  { setLedColor_ThreadSafe(color); }
-    void setMotorSpeed(int speed) { setMotorSpeed_ThreadSafe(speed); }
-    void stopMotor() { stopMotor_ThreadSafe(); }
-    void playSound(int soundId) { playSound_ThreadSafe(soundId); };
+    // Sound control
+    void activateBaseSpeaker(); 
+    void playSound(int soundId);
+
+    // Light control
+    void activateRgbLight();
+    void setLedColor(DuploEnums::DuploColor color);
     
+    // Sensor control
+    void activateColorSensor(); // Legacy method for backward compatibility
+   
     // Callback registration
     void setOnConnectedCallback(ConnectionCallback callback);
     void setOnDisconnectedCallback(ConnectionCallback callback);
+    void setDetectedColorCallback(DetectedColorCallback callback);
+    void setColorSensorCallback(ColorDistanceSensorCallback callback);
     
+    void processResponseQueue();
+
     // Main update loop
     void update();
 };
