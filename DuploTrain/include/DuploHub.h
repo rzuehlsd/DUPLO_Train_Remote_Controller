@@ -130,10 +130,6 @@ private:
     void bleTaskFunction();
     
 
-    // Add missing member variables
-    void initResponseQueue();
-    void cleanupResponseQueue();
-
 
 
 protected:
@@ -142,7 +138,7 @@ protected:
     typedef void (*ColorSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
     static void colorSensorCallbackWrapper(void* hubInstance, byte portNumber, DeviceType deviceType, uint8_t* pData);
     void colorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
- 
+    void activateColorSensor();
     
 public:
     // Constructor & Destructor
@@ -170,6 +166,7 @@ public:
     void setHubName(const char* name);
     std::string getHubAddress();
     std::string getHubName();
+    void listDevicePorts();
     
     // Motor control
     void setMotorPort(byte port);
@@ -186,7 +183,7 @@ public:
     void setLedColor(DuploEnums::DuploColor color);
     
     // Sensor control
-    void activateColorSensor(); // Legacy method for backward compatibility
+    void activateSensor(); // Legacy method for backward compatibility
    
     // Callback registration
     void setOnConnectedCallback(ConnectionCallback callback);

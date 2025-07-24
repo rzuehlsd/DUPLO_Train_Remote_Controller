@@ -13,20 +13,24 @@
 #include "Arduino.h"
 #include "DuploHub.h"
 
+#define DEBUG 1 // Enable debug logging
+#include "debug.h"
+
 // Default constructor
 DuploHub::DuploHub() : motorPort((byte)PoweredUpHubPort::A), wasConnected(false),
                        connectionState(false), connectingState(false),
                        connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
-                       onConnectedCallback(nullptr), onDisconnectedCallback(nullptr) {
-    initFreeRTOS();
+                       onConnectedCallback(nullptr), onDisconnectedCallback(nullptr) 
+{
 }
 
 // Constructor with port specification
 DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false),
                                 connectionState(false), connectingState(false),
                                 connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
-                                onConnectedCallback(nullptr), onDisconnectedCallback(nullptr) {
-    initFreeRTOS();
+                                onConnectedCallback(nullptr), onDisconnectedCallback(nullptr) 
+{
+    
 }
 
 // Destructor
@@ -39,16 +43,22 @@ void DuploHub::initFreeRTOS() {
     // Create mutex for thread-safe access to connection state
     connectionMutex = xSemaphoreCreateMutex();
     if (connectionMutex == nullptr) {
-        Serial.println("ERROR: Failed to create connection mutex");
+        DEBUG_LOG("ERROR: Failed to create connection mutex");
     }
     
     // Create command queue for thread-safe communication
     commandQueue = xQueueCreate(10, sizeof(HubCommand));  // Queue size: 10 commands
     if (commandQueue == nullptr) {
-        Serial.println("ERROR: Failed to create command queue");
+        DEBUG_LOG("ERROR: Failed to create command queue");
     }
-    
-    Serial.println("DuploHub: FreeRTOS objects initialized");
+
+    responseQueue = xQueueCreate(100, sizeof(HubResponse)); // Queue size: 10 response entries
+    if (responseQueue == nullptr) {
+        DEBUG_LOG("ERROR: Failed to create response queue");
+    }
+
+    DEBUG_LOG("DuploHub: FreeRTOS objects initialized");
+    Serial.flush();
 }
 
 // Cleanup FreeRTOS objects
@@ -66,12 +76,18 @@ void DuploHub::cleanupFreeRTOS() {
     if (commandQueue != nullptr) {
         vQueueDelete(commandQueue);
         commandQueue = nullptr;
+        DEBUG_LOG("DuploHub: Command queue cleaned up");
     }
 
     // Cleanup response queue
-    cleanupResponseQueue();
+    if (responseQueue != nullptr) {
+        vQueueDelete(responseQueue);
+        responseQueue = nullptr;
+        DEBUG_LOG("DuploHub: Response queue cleaned up");
+    }
 
-    Serial.println("DuploHub: FreeRTOS objects cleaned up");
+    DEBUG_LOG("DuploHub: FreeRTOS objects cleaned up");
+    Serial.flush();
 }
 
 // Update connection state (thread-safe)
@@ -86,13 +102,15 @@ void DuploHub::updateConnectionState(bool connected, bool connecting) {
 
 // Initialize the hub (thread-safe - can be called from main loop)
 void DuploHub::init() {
-    Serial.println("WARNING: init() should not be called directly - BLE task handles initialization");
-    // The actual initialization is now handled by the BLE task
+    DEBUG_LOG("DuploHub: Initializing ...");
+    delay(1000);
+    initFreeRTOS();
+    delay(500);
 }
 
 // Initialize the hub with specific address (thread-safe)
 void DuploHub::init(const std::string& address) {
-    Serial.println("WARNING: init(address) should not be called directly - BLE task handles initialization");
+    DEBUG_LOG("WARNING: init(address) should not be called directly - BLE task handles initialization");
     // For Phase 2, we'll store the address preference but let BLE task handle it
     // This could be enhanced in Phase 3 to set a preferred address
 }
@@ -100,7 +118,7 @@ void DuploHub::init(const std::string& address) {
 // Legacy connect method (kept for compatibility but deprecated)
 // Note: Actual connection is now handled by BLE task
 bool DuploHub::connect() {
-    Serial.println("WARNING: connect() is deprecated - connection handled by BLE task");
+    DEBUG_LOG("WARNING: connect() is deprecated - connection handled by BLE task");
     return isConnected();
 }
 
@@ -140,7 +158,7 @@ void DuploHub::setHubName(const char* name) {
         cmd.data.hubName.name[sizeof(cmd.data.hubName.name) - 1] = '\0'; // Ensure null termination
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue hub name command");
+            DEBUG_LOG("WARNING: Failed to queue hub name command");
         }
     } else {
         char hubName[strlen(name) + 1];
@@ -167,10 +185,10 @@ void DuploHub::setLedColor(DuploEnums::DuploColor color) {
         cmd.data.led.color = (DuploEnums::DuploColor) color;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue LED color command");
+            DEBUG_LOG("WARNING: Failed to queue LED color command");
         }
     } else {
-        Serial.println("ERROR: Command queue is not initialized");
+        DEBUG_LOG("ERROR: Command queue is not initialized");
     }
 }
 
@@ -182,12 +200,11 @@ void DuploHub::setMotorSpeed(int speed) {
         cmd.data.motor.speed = speed;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue motor speed command");
+            DEBUG_LOG("WARNING: Failed to queue motor speed command");
         }
     } else {
         hub.setBasicMotorSpeed(motorPort, speed);
-        Serial.print("DuploHub: setBasicMotorSpeed executed at: ");
-        Serial.println(millis());
+        DEBUG_LOG("DuploHub: setBasicMotorSpeed executed at: %lu", millis());
     }
 }
 
@@ -198,7 +215,7 @@ void DuploHub::stopMotor() {
         cmd.type = DuploEnums::CMD_STOP_MOTOR;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue stop motor command");
+            DEBUG_LOG("WARNING: Failed to queue stop motor command");
         }
     } else {
         hub.stopBasicMotor(motorPort);
@@ -214,10 +231,10 @@ void DuploHub::playSound(int soundId) {
         cmd.data.sound.soundId = soundId;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue play sound command");
+            DEBUG_LOG("WARNING: Failed to queue play sound command");
         }
     } else {
-        Serial.println("ERROR: Command queue not initialized");
+        DEBUG_LOG("ERROR: Command queue not initialized");
     }
 }
 
@@ -228,10 +245,10 @@ void DuploHub::activateRgbLight() {
         cmd.type = DuploEnums::CMD_ACTIVATE_RGB_LIGHT;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue activate RGB light command");
+            DEBUG_LOG("WARNING: Failed to queue activate RGB light command");
         }
     } else {
-        Serial.println("ERROR: Command queue is not initialized");
+        DEBUG_LOG("ERROR: Command queue is not initialized");
     }
 }
 
@@ -242,35 +259,49 @@ void DuploHub::activateBaseSpeaker() {
         cmd.type = DuploEnums::CMD_ACTIVATE_BASE_SPEAKER;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue activate base speaker command");
+            DEBUG_LOG("WARNING: Failed to queue activate base speaker command");
         }
     } else {
-        Serial.println("ERROR: Command queue is not initialized");
+        DEBUG_LOG("ERROR: Command queue is not initialized");
+    }
+}
+
+void DuploHub::activateSensor() {
+    if (commandQueue != nullptr) {
+        HubCommand cmd;
+        cmd.type = DuploEnums::CMD_ACTIVATE_COLOR_SENSOR;
+
+        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
+            DEBUG_LOG("WARNING: Failed to queue activate color sensor command");
+        }
+    } else {
+        DEBUG_LOG("ERROR: Command queue is not initialized");
     }
 }
 
 // Callback for color sensor updates
 void DuploHub::colorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData) {
-    int detectedColor = 0;
-    if (responseQueue != nullptr) {
+    static int lastColor = -1;
+    if (responseQueue != nullptr ) {
         myLegoHub *myHub = (myLegoHub *)hub;
-        if (deviceType == DeviceType::COLOR_DISTANCE_SENSOR)
+        if (deviceType == DeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR)
         {
-            detectedColor = myHub->parseColor(pData);
-            Serial.print("Color: ");
-            Serial.println(detectedColor);
-        HubResponse response;
-        response.type = DuploEnums::ResponseType::Detected_Color;
-        response.data.colorResponse.detectedColor = (DuploEnums::DuploColor) detectedColor;
-
-        if (xQueueSend(responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
-            Serial.println("WARNING: Failed to queue color sensor data");
-        }
+            int detectedColor = myHub->parseColor(pData);
+            if (lastColor != detectedColor) {
+                DEBUG_LOG("(%ld) Last Color: %d , Detected Color: %d", millis(), lastColor, detectedColor);
+                HubResponse response;
+                response.type = DuploEnums::ResponseType::Detected_Color;
+                response.data.colorResponse.detectedColor = (DuploEnums::DuploColor) detectedColor;
+                lastColor = detectedColor;
+                if (xQueueSend(responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
+                    DEBUG_LOG("WARNING: Failed to queue color sensor data");
+                }
+            }
         } else {
-            Serial.println("ERROR: Unsupported device type for color sensor callback");
+            DEBUG_LOG("ERROR: Unsupported device type for color sensor callback");
         }
     } else {
-        Serial.println("ERROR: Response queue is not initialized");
+        DEBUG_LOG("ERROR: Response queue is not initialized");
     }
 }
 
@@ -279,27 +310,13 @@ void DuploHub::colorSensorCallbackWrapper(void* hubInstance, byte portNumber, De
     if (hubInstance != nullptr) {
         DuploHub* instance = static_cast<DuploHub*>(hubInstance);
         instance->colorSensorCallback(hubInstance, portNumber, deviceType, pData);
-    }
-}
-
-// Initialize response queue
-void DuploHub::initResponseQueue() {
-    responseQueue = xQueueCreate(10, sizeof(HubResponse)); // Queue size: 10 response entries
-    if (responseQueue == nullptr) {
-        Serial.println("ERROR: Failed to create response queue");
+        delay(200); // Small delay to prevent flooding the queue
     } else {
-        Serial.println("DuploHub: Response queue initialized");
+        DEBUG_LOG("ERROR: Hub instance is null in color sensor callback wrapper");
     }
 }
 
-// Cleanup response queue
-void DuploHub::cleanupResponseQueue() {
-    if (responseQueue != nullptr) {
-        vQueueDelete(responseQueue);
-        responseQueue = nullptr;
-        Serial.println("DuploHub: Response queue cleaned up");
-    }
-}
+
 
 // Set motor port
 void DuploHub::setMotorPort(byte port) {
@@ -310,6 +327,15 @@ void DuploHub::setMotorPort(byte port) {
 byte DuploHub::getMotorPort() {
     return motorPort;
 }
+
+void DuploHub::listDevicePorts() {
+    DEBUG_LOG("Listing device ports:");
+    for (byte port = 0; port < 4; port++) {
+        int deviceType = (int) hub.getDeviceTypeForPortNumber(port);
+        DEBUG_LOG("Port %d: %d", port, deviceType);
+    }
+}
+
 
 // Set callback for when hub connects
 void DuploHub::setOnConnectedCallback(ConnectionCallback callback) {
@@ -340,13 +366,13 @@ void DuploHub::startBLETask() {
         );
         
         if (result == pdPASS) {
-            Serial.println("DuploHub: BLE task started successfully");
+            DEBUG_LOG("DuploHub: BLE task started successfully");
         } else {
-            Serial.println("ERROR: Failed to start BLE task");
+            DEBUG_LOG("ERROR: Failed to start BLE task");
             bleTaskHandle = nullptr;
         }
     } else {
-        Serial.println("WARNING: BLE task is already running");
+        DEBUG_LOG("WARNING: BLE task is already running");
     }
 }
 
@@ -355,7 +381,7 @@ void DuploHub::stopBLETask() {
     if (bleTaskHandle != nullptr) {
         vTaskDelete(bleTaskHandle);
         bleTaskHandle = nullptr;
-        Serial.println("DuploHub: BLE task stopped");
+        DEBUG_LOG("DuploHub: BLE task stopped");
     }
 }
 
@@ -367,7 +393,8 @@ bool DuploHub::isBLETaskRunning() {
 // Ensure BLE task is running (auto-recovery)
 void DuploHub::ensureBLETaskRunning() {
     if (!isBLETaskRunning()) {
-        Serial.println("DuploHub: BLE task not running, attempting to restart...");
+        DEBUG_LOG("DuploHub: BLE task not running, attempting to restart...");
+        delay(200);
         startBLETask();
     }
 }
@@ -380,7 +407,8 @@ void DuploHub::bleTaskWrapper(void* parameter) {
 
 // BLE task function
 void DuploHub::bleTaskFunction() {
-    Serial.println("BLE Task: Started successfully");
+    DEBUG_LOG("BLE Task: Started successfully");
+    Serial.flush();
 
     unsigned long lastConnectionCheck = 0;
     const unsigned long CONNECTION_CHECK_INTERVAL = 1000; // Check connection every 1 second
@@ -417,9 +445,9 @@ void DuploHub::updateBLE() {
     // BLE Connection Management
     if (hubDisconnected) {
         if (!wasEverConnected) {
-            Serial.println("BLE Task: Attempting initial connection to hub...");
+            DEBUG_LOG("BLE Task: Attempting initial connection to hub...");
         } else {
-            Serial.println("BLE Task: Attempting to reconnect to hub...");
+            DEBUG_LOG("BLE Task: Attempting to reconnect to hub...");
         }
         hub.init();
     }
@@ -429,13 +457,13 @@ void DuploHub::updateBLE() {
         hub.connectHub();
         if (hub.isConnected()) {
             wasEverConnected = true;
-            Serial.println("BLE Task: Connected to HUB");
-            Serial.print("BLE Task: Hub address: ");
-            Serial.println(hub.getHubAddress().toString().c_str());
-            Serial.print("BLE Task: Hub name: ");
-            Serial.println(hub.getHubName().c_str());
+            DEBUG_LOG("BLE Task: Connected to HUB");
+            Serial.flush();
+            DEBUG_LOG("BLE Task: Hub address: %s", hub.getHubAddress().toString().c_str());
+            DEBUG_LOG("BLE Task: Hub name: %s", hub.getHubName().c_str());
         } else {
-            Serial.println("BLE Task: Failed to connect to HUB");
+            DEBUG_LOG("BLE Task: Failed to connect to HUB");
+            Serial.flush();
         }
     }
     
@@ -453,66 +481,69 @@ void DuploHub::processCommandQueue() {
     while (xQueueReceive(commandQueue, &cmd, 0) == pdTRUE) {
         // Only process commands if connected
         if (!hub.isConnected()) {
-            Serial.println("BLE Task: Skipping command - hub not connected");
+            DEBUG_LOG("BLE Task: Skipping command - hub not connected");
             continue;
         }
         
         switch (cmd.type) {
             case DuploEnums::CMD_MOTOR_SPEED:
-                Serial.print("BLE Task: Setting motor speed to ");
-                Serial.println(cmd.data.motor.speed);
-                Serial.flush();
+                DEBUG_LOG("BLE Task: Setting motor speed to %d", cmd.data.motor.speed);
                 hub.setBasicMotorSpeed(motorPort, cmd.data.motor.speed);
-                Serial.print("DuploHub: setBasicMotorSpeed completed at: ");
-                Serial.println(millis());
-                Serial.flush();
+                delay(200);
+                DEBUG_LOG("DuploHub: setBasicMotorSpeed completed at: %lu", millis());
                 break;
                 
             case DuploEnums::CMD_STOP_MOTOR:
-                Serial.println("BLE Task: Stopping motor");
+                DEBUG_LOG("BLE Task: Stopping motor");
                 hub.stopBasicMotor(motorPort);
+                delay(200); // Ensure motor stop command is processed
+                DEBUG_LOG("DuploHub: stopBasicMotor completed at: %lu", millis());
                 break;
                 
             case DuploEnums::CMD_SET_LED_COLOR:
-                Serial.print("BLE Task: Setting LED color to ");
-                Serial.println(cmd.data.led.color);
-                Serial.flush();
+                DEBUG_LOG("BLE Task: Setting LED color to %d", cmd.data.led.color);
                 hub.setLedColor((Color)cmd.data.led.color);
-                Serial.print("DuploHub: setLEDColor completed at: ");
-                Serial.println(millis());
-                Serial.flush();
+                delay(200); // Ensure LED color command is processed
+                DEBUG_LOG("DuploHub: setLEDColor completed at: %lu", millis());
                 break;
                 
             case DuploEnums::CMD_SET_HUB_NAME:
-                Serial.print("BLE Task: Setting hub name to ");
-                Serial.println(cmd.data.hubName.name);
+                DEBUG_LOG("BLE Task: Setting hub name to %s", cmd.data.hubName.name);
                 hub.setHubName(cmd.data.hubName.name);
+                delay(200); // Ensure hub name command is processed
+                DEBUG_LOG("DuploHub: setHubName completed at: %lu", millis());
                 break;
                 
             case DuploEnums::CMD_PLAY_SOUND:
-                Serial.print("BLE Task: Playing sound with ID ");
-                Serial.println(cmd.data.sound.soundId);
-                Serial.flush();
+                DEBUG_LOG("BLE Task: Playing sound with ID %d", cmd.data.sound.soundId);
                 hub.playSound(cmd.data.sound.soundId);
-                Serial.print("DuploHub: playSound completed at: ");
-                Serial.println(millis());
-                Serial.flush();
+                delay(200); // Ensure sound command is processed
+                DEBUG_LOG("DuploHub: playSound completed at: %lu", millis());
                 break;
                 
             case DuploEnums::CMD_ACTIVATE_RGB_LIGHT:
-                Serial.println("BLE Task: Activating RGB light");
+                DEBUG_LOG("BLE Task: Activating RGB light");
                 hub.activateRgbLight();
-                Serial.println("DuploHub: activateRgbLight completed");
+                
+                DEBUG_LOG("DuploHub: activateRgbLight completed");
                 break;
 
             case DuploEnums::CMD_ACTIVATE_BASE_SPEAKER:
-                Serial.println("BLE Task: Activating base speaker");
+                DEBUG_LOG("BLE Task: Activating base speaker");
                 hub.activateBaseSpeaker();
-                Serial.println("DuploHub: activateBaseSpeaker completed");
+                delay(200); // Ensure base speaker command is processed
+                DEBUG_LOG("DuploHub: activateBaseSpeaker completed");
+                break;
+
+            case DuploEnums::CMD_ACTIVATE_COLOR_SENSOR:
+                DEBUG_LOG("BLE Task: Activating color sensor");
+                activateColorSensor();
+                delay(200); // Ensure color sensor command is processed
+                DEBUG_LOG("DuploHub: activateColorSensor completed");
                 break;
                 
             default:
-                Serial.println("BLE Task: Unknown command type");
+                DEBUG_LOG("BLE Task: Unknown command type");
                 break;
         }
     }
@@ -528,8 +559,7 @@ void DuploHub::processResponseQueue() {
     while (xQueueReceive(responseQueue, &response, 0) == pdTRUE) {
         switch (response.type) {
             case DuploEnums::ResponseType::Detected_Color:
-                Serial.print("Detected Color: ");
-                Serial.println(response.data.colorResponse.detectedColor);
+                DEBUG_LOG("Detected Color: %d", response.data.colorResponse.detectedColor);
                 if (detectedColorCallback != nullptr) {
                     detectedColorCallback(response.data.colorResponse.detectedColor);
                 }
@@ -538,7 +568,7 @@ void DuploHub::processResponseQueue() {
             // Add other response types here as needed
 
             default:
-                Serial.println("Unknown response type");
+                DEBUG_LOG("Unknown response type");
                 break;
         }
     }
@@ -559,13 +589,13 @@ void DuploHub::update() {
     // Handle connection state changes
     if (currentlyConnected && !wasConnected) {
         // Connection established
-        Serial.println("Train hub is connected");
+        DEBUG_LOG("Train hub is connected");
         if (onConnectedCallback != nullptr) {
             onConnectedCallback();
         }
     } else if (!currentlyConnected && wasConnected) {
         // Connection lost
-        Serial.println("Train hub is disconnected");
+        DEBUG_LOG("Train hub is disconnected");
         if (onDisconnectedCallback != nullptr) {
             onDisconnectedCallback();
         }
@@ -577,13 +607,15 @@ void DuploHub::update() {
 
 // Activate the color sensor
 void DuploHub::activateColorSensor() {
-    byte portForDevice = hub.getPortForDeviceType((byte)DeviceType::COLOR_DISTANCE_SENSOR);
-    Serial.println(portForDevice, DEC);
+    byte portForDevice = hub.getPortForDeviceType((byte)DeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR);
+    DEBUG_LOG("Port for DUPLO_TRAIN_BASE_COLOR_SENSOR: %d", portForDevice);
+    Serial.flush();
     if (portForDevice != 255) {
-        Serial.println("activatePortDevice");
+        DEBUG_LOG("activatePortDevice");
         hub.activatePortDevice(portForDevice, colorSensorCallbackWrapper);
+        delay(500);
     } else {
-        Serial.println("ERROR: No valid port found for COLOR_DISTANCE_SENSOR");
+        DEBUG_LOG("ERROR: No valid port found for DUPLO_TRAIN_BASE_COLOR_SENSOR");
     }
 }
 
