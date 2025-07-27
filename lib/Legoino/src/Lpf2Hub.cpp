@@ -457,7 +457,9 @@ int Lpf2Hub::parseTachoMotor(uint8_t *pData)
 /**
  * @brief Parse speed value of a duplo train hub
  * @param [in] pData The pointer to the received data
- * @return speed value
+ * @return speed value (raw sensor value -32768..32767)
+ * @note Use LegoinoCommon::MapSpeedometer(value) to get normalized -100..100 range
+ *       Use LegoinoCommon::MapSpeedometer(value, maxRawSpeed) to customize mapping range
  */
 int Lpf2Hub::parseSpeedometer(uint8_t *pData)
 {

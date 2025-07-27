@@ -142,13 +142,17 @@ void setup() {
 // Function to process the responseQueue and print detected color
 void detectedColorCb(DuploEnums::DuploColor color) {
     DEBUG_LOG("TrainController:  Detected Color: %d", color);
-    duploHub.setLedColor(color);
+    delay(200); // Allow time for color detection to take effect
+    // duploHub.setLedColor(color);
 }
 
 
 // Function to process the responseQueue and print detected color
 void detectedSpeedCb(int speed) {
     DEBUG_LOG("TrainController:  Detected Speed: %d", speed);
+    delay(200); // Allow time for speed detection to take effect
+    return;
+
     if (speed > 10)
     {
       DEBUG_LOG("Forward");
@@ -330,26 +334,40 @@ void loop() {
    // Handle connection callbacks (non-blocking)
   duploHub.update();
 
-
+  // Process sensor callbacks frequently
+  duploHub.processResponseQueue();
 
   if( duploHub.isConnected()) {
-    // activateInstance(); // Activate RGB light and speaker when connected
-    duploHub.listDevicePorts(); // List connected devices on the hub
+    activateInstance(); // Activate RGB light and speaker when connected
   }
 
-    duploHub.setMotorSpeed(100);
-    delay(1000); // Allow time for motor speed to take effect
+duploHub.setMotorSpeed(35);
+delay(100); // Shorter delay for more responsive sensor reading
 
-    duploHub.processResponseQueue(); // Process response queue for detected colors
+duploHub.setMotorSpeed(0);
+delay(100); 
+
+duploHub.setLedColor(DuploEnums::DuploColor::RED);
+delay(100); 
+
+duploHub.setLedColor(DuploEnums::DuploColor::GREEN);
+delay(100); 
+
+duploHub.playSound(DuploEnums::DuploSound::HORN);
+delay(1000); // Keep longer delay for sound to complete
+
+duploHub.playSound(DuploEnums::DuploSound::BRAKE);
+delay(1000); 
+
+
+
+
+duploHub.processResponseQueue();
   
 
+// Check CPU temperature every 5 seconds
+checkMCUTemp();
 
-
- 
-
-  // Check CPU temperature every 5 seconds
-  checkMCUTemp();
-
-  delay(200); // Add a small delay to reduce CPU load
+delay(200); // Add a small delay to reduce CPU load
 } // End of loop
 

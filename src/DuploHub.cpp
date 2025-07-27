@@ -12,8 +12,9 @@
 
 #include "Arduino.h"
 #include "DuploHub.h"
+#include "LegoinoCommon.h"
 
-#define DEBUG 1 // Enable debug logging
+#undef DEBUG // Enable debug logging
 #include "debug.h"
 
 // Initialize static instance pointer
@@ -235,6 +236,7 @@ void DuploHub::stopMotor() {
 
 // Play a sound on the Duplo Hub (thread-safe)
 void DuploHub::playSound(int soundId) {
+    DEBUG_LOG("DuploHub: playSound called with soundId: %d", soundId);
     if (commandQueue != nullptr) {
         HubCommand cmd;
         cmd.type = DuploEnums::CMD_PLAY_SOUND;
@@ -242,9 +244,11 @@ void DuploHub::playSound(int soundId) {
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
             DEBUG_LOG("WARNING: Failed to queue play sound command");
+        } else {
+            DEBUG_LOG("DuploHub: Sound command queued successfully");
         }
     } else {
-        DEBUG_LOG("ERROR: Command queue not initialized");
+        DEBUG_LOG("ERROR: Command queue not initialized - cannot play sound");
     }
 }
 
@@ -309,21 +313,24 @@ void DuploHub::staticColorSensorCallback(void* hub, byte portNumber, DeviceType 
     myLegoHub *myHub = (myLegoHub *)hub;
     if (deviceType == DeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR) {
         int detectedColor = myHub->parseColor(pData);
-        if (lastColor != detectedColor) {
-            DEBUG_LOG("(%ld) Static Color Callback - Last Color: %d , Detected Color: %d", millis(), lastColor, detectedColor);
-            lastColor = detectedColor;
-            
-            // Access the singleton instance to get the response queue
-            if (instance != nullptr && instance->responseQueue != nullptr) {
-                HubResponse response;
-                response.type = DuploEnums::ResponseType::Detected_Color;
-                response.data.colorResponse.detectedColor = (DuploEnums::DuploColor) detectedColor;
+        if(detectedColor >= DuploEnums::DuploColor::BLACK && detectedColor <= DuploEnums::DuploColor::WHITE) {
+            // Only process valid color values
+            if (lastColor != detectedColor) {
+                DEBUG_LOG("(%ld) Static Color Callback - Last Color: %d , Detected Color: %d", millis(), lastColor, detectedColor);
+                lastColor = detectedColor;
                 
-                if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
-                    DEBUG_LOG("WARNING: Failed to queue color sensor response from static callback");
+                // Access the singleton instance to get the response queue
+                if (instance != nullptr && instance->responseQueue != nullptr) {
+                    HubResponse response;
+                    response.type = DuploEnums::ResponseType::Detected_Color;
+                    response.data.colorResponse.detectedColor = (DuploEnums::DuploColor) detectedColor;
+                    
+                    if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
+                        DEBUG_LOG("WARNING: Failed to queue color sensor response from static callback");
+                    }
+                } else {
+                    DEBUG_LOG("ERROR: Cannot access response queue from static color callback");
                 }
-            } else {
-                DEBUG_LOG("ERROR: Cannot access response queue from static color callback");
             }
         }
     } else {
@@ -346,8 +353,8 @@ void DuploHub::staticSpeedSensorCallback(void* hub, byte portNumber, DeviceType 
             if (instance != nullptr && instance->responseQueue != nullptr) {
                 HubResponse response;
                 response.type = DuploEnums::ResponseType::Detected_Speed;
-                response.data.speedResponse.detectedSpeed = detectedSpeed;
-                
+                response.data.speedResponse.detectedSpeed = myHub->MapSpeedometer(detectedSpeed);
+
                 if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
                     DEBUG_LOG("WARNING: Failed to queue speed sensor response from static callback");
                 }
@@ -567,7 +574,7 @@ void DuploHub::processCommandQueue() {
                 
             case DuploEnums::CMD_PLAY_SOUND:
                 DEBUG_LOG("BLE Task: Playing sound with ID %d", cmd.data.sound.soundId);
-                hub.playSound(cmd.data.sound.soundId);
+                hub.playSound((byte)cmd.data.sound.soundId);
                 delay(200); // Ensure sound command is processed
                 DEBUG_LOG("DuploHub: playSound completed at: %lu", millis());
                 break;

@@ -216,6 +216,12 @@ public:
     void activateRgbLight();
     void setLedColor(DuploEnums::DuploColor color);
     
+    // Direct DUPLO-specific implementations (low-level)
+    void activateBaseSpeakerDirect();
+    void playSoundDirect(byte sound);
+    void activateRgbLightDirect();
+    void setLedColorDirect(Color color);
+    
     // Sensor control
     void activateColorSensor(); // Legacy method for backward compatibility
     void activateSpeedSensor(); // Legacy method for backward compatibility

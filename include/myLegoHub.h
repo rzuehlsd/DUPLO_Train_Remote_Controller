@@ -10,6 +10,8 @@ public:
     void playSound(byte sound);
     void activateRgbLight();
     void setLedColor(Color color);
+
+    int MapSpeedometer(int rawSpeed, int maxRawSpeed = 255);
 };
 
 #endif // MY_LEGO_HUB_H
