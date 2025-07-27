@@ -14,7 +14,7 @@
 #include "DuploHub.h"
 #include "LegoinoCommon.h"
 
-#undef DEBUG // Enable debug logging
+#define DEBUG // Enable debug logging
 #include "debug.h"
 
 // Initialize static instance pointer
@@ -25,7 +25,8 @@ DuploHub::DuploHub() : motorPort((byte)DuploEnums::DuploTrainHubPort::MOTOR), wa
                        connectionState(false), connectingState(false),
                        connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
                        onConnectedCallback(nullptr), onDisconnectedCallback(nullptr),
-                       detectedColorCallback(nullptr), detectedSpeedCallback(nullptr) 
+                       detectedColorCallback(nullptr), detectedSpeedCallback(nullptr),
+                       detectedVoltageCallback(nullptr) 
 {
     instance = this; // Set static instance pointer
 }
@@ -35,7 +36,8 @@ DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false),
                                 connectionState(false), connectingState(false),
                                 connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
                                 onConnectedCallback(nullptr), onDisconnectedCallback(nullptr),
-                                detectedColorCallback(nullptr), detectedSpeedCallback(nullptr) 
+                                detectedColorCallback(nullptr), detectedSpeedCallback(nullptr),
+                                detectedVoltageCallback(nullptr) 
 {
     instance = this; // Set static instance pointer
 }
@@ -306,6 +308,19 @@ void DuploHub::activateSpeedSensor() {
     }
 }
 
+void DuploHub::activateVoltageSensor() {
+    if (commandQueue != nullptr) {
+        HubCommand cmd;
+        cmd.type = DuploEnums::CMD_ACTIVATE_VOLTAGE_SENSOR;
+
+        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
+            DEBUG_LOG("WARNING: Failed to queue activate voltage sensor command");
+        }
+    } else {
+        DEBUG_LOG("ERROR: Command queue is not initialized");
+    }
+}
+
 // Static callback function that can be passed to activatePortDevice
 void DuploHub::staticColorSensorCallback(void* hub, byte portNumber, DeviceType deviceType, uint8_t* pData) {
     static int lastColor = -1;
@@ -345,7 +360,7 @@ void DuploHub::staticSpeedSensorCallback(void* hub, byte portNumber, DeviceType 
     myLegoHub *myHub = (myLegoHub *)hub;
     if (deviceType == DeviceType::DUPLO_TRAIN_BASE_SPEEDOMETER) {
         int detectedSpeed = myHub->parseSpeedometer(pData);
-        if (lastSpeed != detectedSpeed) {
+        if (abs(lastSpeed - detectedSpeed) > SPEED_THRESHOLD) { // Only report significant speed changes
             DEBUG_LOG("(%ld) Static Speed Callback - Last Speed: %d , Detected Speed: %d", millis(), lastSpeed, detectedSpeed);
             lastSpeed = detectedSpeed;
             
@@ -367,6 +382,35 @@ void DuploHub::staticSpeedSensorCallback(void* hub, byte portNumber, DeviceType 
     }
 }
 
+// Static callback function that can be passed to activatePortDevice for voltage sensor
+void DuploHub::staticVoltageSensorCallback(void* hub, byte portNumber, DeviceType deviceType, uint8_t* pData) {
+    static float lastVoltage = -1.0f;
+    
+    myLegoHub *myHub = (myLegoHub *)hub;
+    if (deviceType == DeviceType::VOLTAGE_SENSOR) {
+        float detectedVoltage = (float)myHub->parseVoltageSensor(pData);
+        if (abs(lastVoltage - detectedVoltage) > VOLTAGE_THRESHOLD) { // Only report significant voltage changes
+            DEBUG_LOG("(%ld) Static Voltage Callback - Last Voltage: %.2f , Detected Voltage: %.2f", millis(), lastVoltage, detectedVoltage);
+            lastVoltage = detectedVoltage;
+            
+            // Access the singleton instance to get the response queue
+            if (instance != nullptr && instance->responseQueue != nullptr) {
+                HubResponse response;
+                response.type = DuploEnums::ResponseType::Detected_Voltage;
+                response.data.voltageResponse.detectedVoltage = detectedVoltage;
+
+                if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
+                    DEBUG_LOG("WARNING: Failed to queue voltage sensor response from static callback");
+                }
+            } else {
+                DEBUG_LOG("ERROR: Cannot access response queue from static voltage callback");
+            }
+        }
+    } else {
+        DEBUG_LOG("ERROR: Unsupported device type for voltage sensor callback");
+    }
+}
+
 
 
 // Set motor port
@@ -382,11 +426,11 @@ byte DuploHub::getMotorPort() {
 void DuploHub::listDevicePorts() {
     DEBUG_LOG("Listing Duplo Train device ports:");
     DEBUG_LOG("Motor Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::DUPLO_TRAIN_BASE_MOTOR));
-    DEBUG_LOG("Speed Sensor Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::DUPLO_TRAIN_BASE_SPEEDOMETER));
-    DEBUG_LOG("Color Sensor Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR));
-    DEBUG_LOG("Voltage Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::VOLTAGE_SENSOR));
     DEBUG_LOG("Speaker Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::DUPLO_TRAIN_BASE_SPEAKER));
-    DEBUG_LOG("Light Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::LIGHT));
+    DEBUG_LOG("Color Sensor Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR));
+    DEBUG_LOG("Speed Sensor Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::DUPLO_TRAIN_BASE_SPEEDOMETER));
+    DEBUG_LOG("Voltage Port: %d", (int) hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::VOLTAGE_SENSOR));
+   
 }
 
 
@@ -408,6 +452,11 @@ void DuploHub::setDetectedColorCallback(DetectedColorCallback callback) {
 // Implement the function to register the detected speed callback
 void DuploHub::setDetectedSpeedCallback(DetectedSpeedCallback callback) {
     detectedSpeedCallback = callback;
+}
+
+// Implement the function to register the detected voltage callback
+void DuploHub::setDetectedVoltageCallback(DetectedVoltageCallback callback) {
+    detectedVoltageCallback = callback;
 }
 
 // Start BLE task
@@ -606,6 +655,12 @@ void DuploHub::processCommandQueue() {
                 delay(200);
                 DEBUG_LOG("DuploHub: setSpeedSensorCallback completed");
                 break;
+            case DuploEnums::CMD_ACTIVATE_VOLTAGE_SENSOR:
+                DEBUG_LOG("BLE Task: Activating voltage sensor");
+                hub.activatePortDevice((byte)DuploEnums::DuploTrainHubPort::VOLTAGE, staticVoltageSensorCallback);
+                delay(200);
+                DEBUG_LOG("DuploHub: setVoltageSensorCallback completed");
+                break;
                 
             default:
                 DEBUG_LOG("BLE Task: Unknown command type");
@@ -639,7 +694,13 @@ void DuploHub::processResponseQueue() {
                 }
                 break;
 
-            // Add other response types here as needed
+            case DuploEnums::ResponseType::Detected_Voltage:
+                DEBUG_LOG("Detected Voltage: %.2f V", response.data.voltageResponse.detectedVoltage);
+                if (detectedVoltageCallback != nullptr) {
+                    detectedVoltageCallback(response.data.voltageResponse.detectedVoltage);
+                    DEBUG_LOG("Detected Voltage Callback executed");
+                }
+                break;
 
             default:
                 DEBUG_LOG("Unknown response type");

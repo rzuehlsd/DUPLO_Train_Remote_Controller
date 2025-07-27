@@ -61,3 +61,9 @@ int myLegoHub::MapSpeedometer(int rawSpeed, int maxRawSpeed)
         return map(clampedSpeed, MIN_PRACTICAL_SPEED, -DEAD_ZONE, -100, -1);
     }
 }
+
+float myLegoHub::parseVoltage(uint8_t *pData)
+{
+    // Use Legoino's Lpf2Hub::parseVoltageSensor
+    return (float)Lpf2Hub::parseVoltageSensor(pData);
+}

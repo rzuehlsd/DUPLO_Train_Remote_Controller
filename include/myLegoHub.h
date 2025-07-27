@@ -12,6 +12,7 @@ public:
     void setLedColor(Color color);
 
     int MapSpeedometer(int rawSpeed, int maxRawSpeed = 255);
+    float parseVoltage(uint8_t *pData);
 };
 
 #endif // MY_LEGO_HUB_H

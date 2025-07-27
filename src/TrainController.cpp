@@ -49,23 +49,83 @@ const unsigned long DEMO_STEP_DURATION = 5000; // 1 second per step
 
 
 
+
+// Function to process the responseQueue and print detected color
+void detectedColorCb(DuploEnums::DuploColor color) {
+    DEBUG_LOG("TrainController:  Detected Color: %d", color);
+    delay(200); // Allow time for color detection to take effect
+    // duploHub.setLedColor(color);
+}
+
+
+// Function to process the responseQueue and print detected voltage
+void detectedVoltageCb(float voltage) {
+    DEBUG_LOG("TrainController:  Detected Voltage: %.2f V", voltage);
+    delay(200); // Allow time for voltage detection to take effect
+}
+
+
+
+// Function to process the responseQueue and print detected color
+void detectedSpeedCb(int speed) {
+    DEBUG_LOG("TrainController:  Detected Speed: %d", speed);
+    delay(200); // Allow time for speed detection to take effect
+    return;
+
+    if (speed > 10)
+    {
+      DEBUG_LOG("Forward");
+      duploHub.setMotorSpeed(speed/2);
+      delay(100); // Allow time for motor speed to take effect
+    }
+    else if (speed < -10)
+    {
+      DEBUG_LOG("Back");
+      duploHub.setMotorSpeed(speed/2);
+      delay(100); // Allow time for motor speed to take effect
+    }
+    else
+    {
+      DEBUG_LOG("Stop");
+      duploHub.stopMotor();
+      delay(100); // Allow time for motor to stop
+    }
+}
+
+
 // Callback function when hub connects
 void onHubConnected() {
     DEBUG_LOG("TrainController: Hub connected - initializing train demo!");
-    
     delay(1000); // Allow time for activation
     DEBUG_LOG("TrainController: Hub instance activated, starting demo sequence...");
 
-    // Set hub name
+    duploHub.listDevicePorts(); // List connected devices on the hub
+    delay(1000);
+    duploHub.activateRgbLight();
+    delay(200);
+    duploHub.activateBaseSpeaker();
+    delay(200);
+    duploHub.activateColorSensor();
+    delay(200);
+    duploHub.activateSpeedSensor();
+    delay(200);
+    duploHub.activateVoltageSensor();
+    delay(200);
+
+    duploHub.setDetectedColorCallback(detectedColorCb);
+    delay(200);
+    duploHub.setDetectedSpeedCallback(detectedSpeedCb);
+    delay(200);
+    duploHub.setDetectedVoltageCallback(detectedVoltageCb);
+    delay(200);
+
     duploHub.setHubName("DuploTrainHub");
     DEBUG_LOG("TrainController: Connected to hub: %s", duploHub.getHubName().c_str());
     DEBUG_LOG("TrainController: Hub address: %s", duploHub.getHubAddress().c_str());
-    
-    // Start the demo
+
     demoRunning = true;
     demoStep = 0;
     lastDemoStep = millis();
-    
     DEBUG_LOG("TrainController: Starting train demo sequence...");
 }
 
@@ -137,67 +197,6 @@ void setup() {
     DEBUG_LOG("TrainController: Ready - BLE task running, waiting for hub connection...");
 } 
 
-
-
-// Function to process the responseQueue and print detected color
-void detectedColorCb(DuploEnums::DuploColor color) {
-    DEBUG_LOG("TrainController:  Detected Color: %d", color);
-    delay(200); // Allow time for color detection to take effect
-    // duploHub.setLedColor(color);
-}
-
-
-// Function to process the responseQueue and print detected color
-void detectedSpeedCb(int speed) {
-    DEBUG_LOG("TrainController:  Detected Speed: %d", speed);
-    delay(200); // Allow time for speed detection to take effect
-    return;
-
-    if (speed > 10)
-    {
-      DEBUG_LOG("Forward");
-      duploHub.setMotorSpeed(speed/2);
-      delay(100); // Allow time for motor speed to take effect
-    }
-    else if (speed < -10)
-    {
-      DEBUG_LOG("Back");
-      duploHub.setMotorSpeed(speed/2);
-      delay(100); // Allow time for motor speed to take effect
-    }
-    else
-    {
-      DEBUG_LOG("Stop");
-      duploHub.stopMotor();
-      delay(100); // Allow time for motor to stop
-    }
-    
-}
-
-void activateInstance() {
-
-    static bool onece = false;
-    if (onece) return; // Ensure this is only called once
-    onece = true;
-    delay(500);
-    duploHub.listDevicePorts(); // List connected devices on the hub
-    delay(1000);
-    duploHub.activateRgbLight();
-    delay(200);
-    duploHub.activateBaseSpeaker();
-    delay(200);
-    duploHub.activateColorSensor();
-    delay(200);
-    duploHub.activateSpeedSensor();
-    delay(200);
-
-    // Add a public function to register the callback
-    duploHub.setDetectedColorCallback(detectedColorCb);
-    delay(200);
-    duploHub.setDetectedSpeedCallback(detectedSpeedCb);
-    delay(200);
-
-}
 
 
 
@@ -331,43 +330,34 @@ void checkMCUStatus(DuploHub& duploHub, bool demoRunning) {
 // main loop
 void loop() {
 
-   // Handle connection callbacks (non-blocking)
-  duploHub.update();
+    // Handle connection callbacks (non-blocking)
+    duploHub.update();
 
-  // Process sensor callbacks frequently
-  duploHub.processResponseQueue();
+    if(duploHub.isConnected()) {
+        duploHub.setMotorSpeed(35);
+        delay(100); // Shorter delay for more responsive sensor reading
 
-  if( duploHub.isConnected()) {
-    activateInstance(); // Activate RGB light and speaker when connected
-  }
+        duploHub.setMotorSpeed(0);
+        delay(100); 
+        
+        duploHub.setLedColor(DuploEnums::DuploColor::RED);
+        delay(100); 
+        
+        duploHub.setLedColor(DuploEnums::DuploColor::GREEN);
+        delay(100); 
+        
+        duploHub.playSound(DuploEnums::DuploSound::HORN);
+        delay(1000); // Keep longer delay for sound to complete
+        
+        duploHub.playSound(DuploEnums::DuploSound::BRAKE);
+        delay(1000); 
+        
+        duploHub.processResponseQueue();
+    }
 
-duploHub.setMotorSpeed(35);
-delay(100); // Shorter delay for more responsive sensor reading
+    // Check CPU temperature every 5 seconds
+    checkMCUTemp();
 
-duploHub.setMotorSpeed(0);
-delay(100); 
-
-duploHub.setLedColor(DuploEnums::DuploColor::RED);
-delay(100); 
-
-duploHub.setLedColor(DuploEnums::DuploColor::GREEN);
-delay(100); 
-
-duploHub.playSound(DuploEnums::DuploSound::HORN);
-delay(1000); // Keep longer delay for sound to complete
-
-duploHub.playSound(DuploEnums::DuploSound::BRAKE);
-delay(1000); 
-
-
-
-
-duploHub.processResponseQueue();
-  
-
-// Check CPU temperature every 5 seconds
-checkMCUTemp();
-
-delay(200); // Add a small delay to reduce CPU load
+    delay(200); // Add a small delay to reduce CPU load
 } // End of loop
 

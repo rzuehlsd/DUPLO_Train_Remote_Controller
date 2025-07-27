@@ -50,7 +50,8 @@ namespace DuploEnums {
         CMD_SET_HUB_NAME,
         CMD_PLAY_SOUND,
         CMD_ACTIVATE_COLOR_SENSOR,
-        CMD_ACTIVATE_SPEED_SENSOR
+        CMD_ACTIVATE_SPEED_SENSOR,
+        CMD_ACTIVATE_VOLTAGE_SENSOR
     };
 
     // Enum for available Duplo sounds
@@ -80,7 +81,8 @@ namespace DuploEnums {
     // Enum for response types
     enum ResponseType {
         Detected_Color,
-        Detected_Speed
+        Detected_Speed,
+        Detected_Voltage
     };
 }
 
@@ -92,6 +94,9 @@ typedef void (*DetectedColorCallback)(DuploEnums::DuploColor);
 
 // Add a typedef for the speed callback
 typedef void (*DetectedSpeedCallback)(int detectedSpeed);
+
+// Add a typedef for the voltage callback
+typedef void (*DetectedVoltageCallback)(float detectedVoltage);
 
 
 // Command structure for queue communication
@@ -123,9 +128,24 @@ typedef struct {
         struct {
             int detectedSpeed;
         } speedResponse;
+        struct {
+            float detectedVoltage;
+        } voltageResponse;
         // Add other response types here as needed
     } data;
 } HubResponse;
+
+
+// Threshold definition for callback execution
+#define VOLTAGE_THRESHOLD  0.1f 
+#define SPEED_THRESHOLD  5
+
+
+// DuploHub class definition
+// This class encapsulates the functionality of the LEGO DUPLO Train Hub
+// It provides methods for connecting to the hub, controlling motors, lights, and sensors,
+// and handling BLE communication in a thread-safe manner.
+// The class uses FreeRTOS for task management and synchronization. 
 
 class DuploHub {
 private:
@@ -151,6 +171,7 @@ private:
     ConnectionCallback onDisconnectedCallback;
     DetectedColorCallback detectedColorCallback;
     DetectedSpeedCallback detectedSpeedCallback;
+    DetectedVoltageCallback detectedVoltageCallback;
     
     // Private methods for task management
     void initFreeRTOS();
@@ -172,6 +193,10 @@ protected:
     // Add declaration for speedSensorCallback to be registered with lpf2hub
     typedef void (*SpeedSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
     static void staticSpeedSensorCallback(void* hub, byte portNumber, DeviceType deviceType, uint8_t* pData);
+    
+    // Add declaration for voltageSensorCallback to be registered with lpf2hub
+    typedef void (*VoltageSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+    static void staticVoltageSensorCallback(void* hub, byte portNumber, DeviceType deviceType, uint8_t* pData);
     
     
 public:
@@ -225,12 +250,14 @@ public:
     // Sensor control
     void activateColorSensor(); // Legacy method for backward compatibility
     void activateSpeedSensor(); // Legacy method for backward compatibility
+    void activateVoltageSensor(); // Voltage sensor activation
    
     // Response Queue Callback registration
     void setOnConnectedCallback(ConnectionCallback callback);
     void setOnDisconnectedCallback(ConnectionCallback callback);
     void setDetectedColorCallback(DetectedColorCallback callback);
     void setDetectedSpeedCallback(DetectedSpeedCallback callback);
+    void setDetectedVoltageCallback(DetectedVoltageCallback callback);
 
     // Process response queue events in main task
     void processResponseQueue();
