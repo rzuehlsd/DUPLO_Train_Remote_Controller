@@ -178,6 +178,7 @@ private:
     void cleanupFreeRTOS();
     void updateConnectionState(bool connected, bool connecting);
     void processCommandQueue();
+    void clearQueues();
     static void bleTaskWrapper(void* parameter);
     void bleTaskFunction();
     
@@ -209,7 +210,6 @@ public:
     void init();
     void init(const std::string& address);
 
-    bool connect();               // Legacy connect method (deprecated)
     bool isConnected();           // Thread-safe version
     bool isConnecting();          // Thread-safe version
     bool isDisconnected();        // Thread-safe version
@@ -242,12 +242,12 @@ public:
     void setLedColor(DuploEnums::DuploColor color);
     
     // Direct DUPLO-specific implementations (low-level)
-    void activateBaseSpeakerDirect();
     void playSoundDirect(byte sound);
-    void activateRgbLightDirect();
     void setLedColorDirect(Color color);
     
-    // Sensor control
+    // port activation methods
+    void activateBaseSpeakerDirect();
+    void activateRgbLightDirect();
     void activateColorSensor(); // Legacy method for backward compatibility
     void activateSpeedSensor(); // Legacy method for backward compatibility
     void activateVoltageSensor(); // Voltage sensor activation
@@ -261,6 +261,7 @@ public:
 
     // Process response queue events in main task
     void processResponseQueue();
+    
 
 
 

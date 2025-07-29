@@ -29,29 +29,19 @@
 #include "DuploHub.h"
 #include "SystemMemory.h"
 
+
 #define DEBUG 1 // Enable debug logging
 #include "debug.h"
 
 
-#define TIMING  1 // Set to enable timing test case
-
-// Forward declarations
-void activateInstance();
-
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
-
-// State variables for train demo
-bool demoRunning = false;
-unsigned long lastDemoStep = 0;
-int demoStep = 0;
-const unsigned long DEMO_STEP_DURATION = 5000; // 1 second per step
 
 
 
 
 // Function to process the responseQueue and print detected color
-void detectedColorCb(DuploEnums::DuploColor color) {
+static void detectedColorCb(DuploEnums::DuploColor color) {
     DEBUG_LOG("TrainController:  Detected Color: %d", color);
     delay(200); // Allow time for color detection to take effect
     // duploHub.setLedColor(color);
@@ -59,7 +49,7 @@ void detectedColorCb(DuploEnums::DuploColor color) {
 
 
 // Function to process the responseQueue and print detected voltage
-void detectedVoltageCb(float voltage) {
+static void detectedVoltageCb(float voltage) {
     DEBUG_LOG("TrainController:  Detected Voltage: %.2f V", voltage);
     delay(200); // Allow time for voltage detection to take effect
 }
@@ -67,40 +57,22 @@ void detectedVoltageCb(float voltage) {
 
 
 // Function to process the responseQueue and print detected color
-void detectedSpeedCb(int speed) {
+static void detectedSpeedCb(int speed) {
     DEBUG_LOG("TrainController:  Detected Speed: %d", speed);
     delay(200); // Allow time for speed detection to take effect
-    return;
-
-    if (speed > 10)
-    {
-      DEBUG_LOG("Forward");
-      duploHub.setMotorSpeed(speed/2);
-      delay(100); // Allow time for motor speed to take effect
-    }
-    else if (speed < -10)
-    {
-      DEBUG_LOG("Back");
-      duploHub.setMotorSpeed(speed/2);
-      delay(100); // Allow time for motor speed to take effect
-    }
-    else
-    {
-      DEBUG_LOG("Stop");
-      duploHub.stopMotor();
-      delay(100); // Allow time for motor to stop
-    }
 }
 
 
+
 // Callback function when hub connects
-void onHubConnected() {
-    DEBUG_LOG("TrainController: Hub connected - initializing train demo!");
-    delay(1000); // Allow time for activation
+static void onHubConnected() {
     DEBUG_LOG("TrainController: Hub instance activated, starting demo sequence...");
 
+    #ifdef DEBUG
     duploHub.listDevicePorts(); // List connected devices on the hub
     delay(1000);
+    #endif
+    
     duploHub.activateRgbLight();
     delay(200);
     duploHub.activateBaseSpeaker();
@@ -111,33 +83,26 @@ void onHubConnected() {
     delay(200);
     duploHub.activateVoltageSensor();
     delay(200);
-
+    DEBUG_LOG("DuploHub: All ports activated");
+    
     duploHub.setDetectedColorCallback(detectedColorCb);
     delay(200);
     duploHub.setDetectedSpeedCallback(detectedSpeedCb);
     delay(200);
     duploHub.setDetectedVoltageCallback(detectedVoltageCb);
     delay(200);
+    DEBUG_LOG("DuploHub: All callbacks registered");
 
-    duploHub.setHubName("DuploTrainHub");
+    duploHub.setHubName("DuploTrain_1");
     DEBUG_LOG("TrainController: Connected to hub: %s", duploHub.getHubName().c_str());
     DEBUG_LOG("TrainController: Hub address: %s", duploHub.getHubAddress().c_str());
-
-    demoRunning = true;
-    demoStep = 0;
-    lastDemoStep = millis();
-    DEBUG_LOG("TrainController: Starting train demo sequence...");
 }
 
 
 
 // Callback function when hub disconnects
-void onHubDisconnected() {
+static void onHubDisconnected() {
     DEBUG_LOG("TrainController: Hub disconnected - stopping all operations");
-    
-    // Stop the demo
-    demoRunning = false;
-    demoStep = 0;
     
     // Stop motor as safety measure (though hub is disconnected)
     duploHub.stopMotor();
@@ -150,176 +115,42 @@ void onHubDisconnected() {
 
 
 
-// Custom BLE task function
-void bleTaskFunction(void *param) {
-    while (true) {
-        // Perform BLE operations
-        duploHub.update();
-
-        // Yield control to avoid watchdog resets
-        vTaskDelay(100 / portTICK_PERIOD_MS); // Yield for 10ms
-    }
-}
-
-
 
 void setup() {
     Serial.begin(115200);
     delay(5000);
 
     SerialMUTEX();
-
     DEBUG_LOG("TrainController (2 Core) : Starting up...");
     DEBUG_LOG("");
+
     printMemoryInfo();
 
-    
-    delay(1000); // Initialize DuploHub instance
+    // Initialize DuploHub instance
     duploHub.init();
     delay(1000);
 
     // Register connection event callbacks
     duploHub.setOnConnectedCallback(onHubConnected);
+    delay(200);
     duploHub.setOnDisconnectedCallback(onHubDisconnected);
+    delay(200); // Allow time for BLE task to initialize
 
-    // Start the BLE task for background connection management
-    xTaskCreatePinnedToCore(
-        bleTaskFunction,  // Task function
-        "BLE Task",       // Task name
-        4096,             // Stack size (increase if needed)
-        NULL,             // Parameters
-        1,                // Priority
-        NULL,             // Task handle
-        0                 // Core 0
-    );
-
-    delay(2000); // Allow time for BLE task to initialize
     DEBUG_LOG("TrainController: Ready - BLE task running, waiting for hub connection...");
 } 
 
 
 
 
-void timingMotor(DuploHub& duploHub, bool& demoRunning, int& testCount) {
-    if (duploHub.isConnected() && (testCount < 5)) {
-        // Execute test case 1
-        unsigned long currentMillis = millis();
-        DEBUG_LOG("TrainController: setMotorSpeed called at: %lu", currentMillis);
-        DEBUG_LOG("TrainController Demo: Motor forward (speed 35)");
-        duploHub.setMotorSpeed(35);
 
-        // Delay for 5 seconds
-        delay(5000);
-
-        testCount++;
-    }
-}
-
-void timingSound(DuploHub& duploHub, bool& demoRunning, int& testCount) {
-    if (duploHub.isConnected() && (testCount < 10)) {
-        // Execute test case 1
-        unsigned long currentMillis = millis();
-        DEBUG_LOG("TrainController: playSound called at: %lu", currentMillis);
-        DEBUG_LOG("TrainController Demo: Playing sound %d", 3 + testCount);
-        duploHub.playSound((DuploEnums::DuploSound) 3 + testCount); // Cycle through sounds for testing
-
-        // Delay for 5 seconds
-        delay(5000);
-
-        testCount = testCount + 2; // Increment by 2 to skip to the next sound
-    }
-}
-
-void timingLED(DuploHub& duploHub, bool& demoRunning, int& testCount) {
-    if (duploHub.isConnected() && demoRunning && testCount >= 0 && testCount <= 10) {
-        // Execute test case 2
-        unsigned long currentMillis = millis();
-        DEBUG_LOG("TrainController: setLEDColor called at: %lu", millis());
-        DEBUG_LOG("TrainController Demo: Setting LED to color %d", testCount);
-        duploHub.setLedColor((DuploEnums::DuploColor)(testCount)); // Cycle through colors for testing
-
-        // Delay for 5 seconds
-        delay(5000);
-
-        testCount++;
-    }
-}
-
-void duploHubDemo(DuploHub& duploHub, bool& demoRunning, unsigned long& lastDemoStep, int& demoStep) {
-
-  if (duploHub.isConnected() && demoRunning) {
-        unsigned long currentTime = millis();
-
-        // Check if it's time for the next demo step
-        if (currentTime - lastDemoStep >= DEMO_STEP_DURATION) {
-            lastDemoStep = currentTime;
-
-            switch (demoStep) {
-                case 0:
-                    DEBUG_LOG("TrainController Demo: Setting LED to GREEN");
-                    duploHub.setLedColor(DuploEnums::DuploColor::GREEN);
-                    break;
-
-                case 1:
-                    DEBUG_LOG("TrainController Demo: Setting LED to RED");
-                    duploHub.setLedColor(DuploEnums::DuploColor::RED);
-                    break;
-
-                case 2:
-                    DEBUG_LOG("TrainController: setMotorSpeed called at: %lu", millis());
-                    DEBUG_LOG("TrainController Demo: Motor forward (speed 35)");
-                    duploHub.setMotorSpeed(35);
-                    break;
-
-                case 3:
-                    DEBUG_LOG("TrainController Demo: Stop motor");
-                    duploHub.stopMotor();
-                    break;
-
-                case 4:
-                    DEBUG_LOG("TrainController Demo: Motor backward (speed -35)");
-                    duploHub.setMotorSpeed(-35);
-                    break;
-
-                case 5:
-                    DEBUG_LOG("TrainController Demo: Stop motor - demo complete");
-                    duploHub.stopMotor();
-                    duploHub.setLedColor(DuploEnums::DuploColor::GREEN); // Set to green to indicate completion
-                    break;
-
-                case 6:
-                    DEBUG_LOG("TrainController Demo: Playing sound - HORN");
-                    duploHub.playSound(DuploEnums::DuploSound::HORN);
-                    break;
-
-                case 7:
-                    DEBUG_LOG("TrainController Demo: Playing sound - BELL");
-                    duploHub.playSound(DuploEnums::DuploSound::BRAKE);
-                    demoStep = -1; // Will be incremented to 0, restarting the demo
-                    break;
-            }
-
-            demoStep++;
-        }
-    }
-}
-
-void checkMCUTemp() {
-    static unsigned long lastTempCheck = 0;
-    if (millis() - lastTempCheck >= 5000) { // Every 5 seconds
-        lastTempCheck = millis();
-        float cpuTemp = getCPUTemperature();
-        DEBUG_LOG("CPU Temperature: %.2f °C", cpuTemp);
-    }
-}
-
-void checkMCUStatus(DuploHub& duploHub, bool demoRunning) {
+void checkStatus(DuploHub& duploHub) {
     static unsigned long lastStatusUpdate = 0;
     if (millis() - lastStatusUpdate > 30000) { // Every 30 seconds
-        DEBUG_LOG("TrainController Status - BLE Task: %s, Hub Connected: %s, Demo Active: %s",
+        DEBUG_LOG("TrainController Status - BLE Task: %s, Hub Connected: %s",
                   duploHub.isBLETaskRunning() ? "Running" : "Stopped",
-                  duploHub.isConnected() ? "Yes" : "No",
-                  demoRunning ? "Yes" : "No");
+                  duploHub.isConnected() ? "Yes" : "No");
+        float cpuTemp = getCPUTemperature();
+        DEBUG_LOG("CPU Temperature: %.2f °C", cpuTemp);
         lastStatusUpdate = millis();
     }
 }
@@ -330,34 +161,34 @@ void checkMCUStatus(DuploHub& duploHub, bool demoRunning) {
 // main loop
 void loop() {
 
-    // Handle connection callbacks (non-blocking)
-    duploHub.update();
+    static int color = 0; // Color index for LED cycling
+    static int sound = 3; // Sound index for sound playback
+    static int dir = 1; // Direction for motor control
 
     if(duploHub.isConnected()) {
-        duploHub.setMotorSpeed(35);
-        delay(100); // Shorter delay for more responsive sensor reading
+        
+        // do something
+        duploHub.setLedColor((DuploEnums::DuploColor)color);
+        delay(1000);
+        color = (color + 1) % 11; // Cycle through colors 0-10
 
-        duploHub.setMotorSpeed(0);
-        delay(100); 
-        
-        duploHub.setLedColor(DuploEnums::DuploColor::RED);
-        delay(100); 
-        
-        duploHub.setLedColor(DuploEnums::DuploColor::GREEN);
-        delay(100); 
-        
+        // Play sound
         duploHub.playSound(DuploEnums::DuploSound::HORN);
-        delay(1000); // Keep longer delay for sound to complete
-        
-        duploHub.playSound(DuploEnums::DuploSound::BRAKE);
-        delay(1000); 
-        
+        delay(1000);
+        sound = (sound + 2) % 6;   // Cycle through sounds 0-4
+
+        // Set motor speed
+        duploHub.setMotorSpeed(dir *35);
+        delay(2000);
+        duploHub.stopMotor();
+        dir = -dir; // Reverse direction for next cycle
+
         duploHub.processResponseQueue();
     }
 
-    // Check CPU temperature every 5 seconds
-    checkMCUTemp();
+    // Check Duplo Hub State
+    checkStatus(duploHub);
 
-    delay(200); // Add a small delay to reduce CPU load
+    delay(1000); // Add a small delay to reduce CPU load
 } // End of loop
 

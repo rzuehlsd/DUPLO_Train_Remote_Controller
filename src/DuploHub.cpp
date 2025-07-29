@@ -14,7 +14,7 @@
 #include "DuploHub.h"
 #include "LegoinoCommon.h"
 
-#define DEBUG // Enable debug logging
+#undef DEBUG // Enable debug logging
 #include "debug.h"
 
 // Initialize static instance pointer
@@ -115,10 +115,11 @@ void DuploHub::updateConnectionState(bool connected, bool connecting) {
 // Initialize the hub (thread-safe - can be called from main loop)
 void DuploHub::init() {
     DEBUG_LOG("DuploHub: Initializing ...");
-    DEBUG_LOG("Motor Port: %d", motorPort);
-    delay(1000);
     initFreeRTOS();
     delay(500);
+    startBLETask();
+    delay(500);
+    DEBUG_LOG("DuploHub: Initialization complete");
 }
 
 // Initialize the hub with specific address (thread-safe)
@@ -128,12 +129,7 @@ void DuploHub::init(const std::string& address) {
     // This could be enhanced in Phase 3 to set a preferred address
 }
 
-// Legacy connect method (kept for compatibility but deprecated)
-// Note: Actual connection is now handled by BLE task
-bool DuploHub::connect() {
-    DEBUG_LOG("WARNING: connect() is deprecated - connection handled by BLE task");
-    return isConnected();
-}
+
 
 // Check if hub is connected (thread-safe)
 bool DuploHub::isConnected() {
@@ -437,26 +433,31 @@ void DuploHub::listDevicePorts() {
 // Set callback for when hub connects
 void DuploHub::setOnConnectedCallback(ConnectionCallback callback) {
     onConnectedCallback = callback;
+    DEBUG_LOG("DuploHub: OnConnected callback set");
 }
 
 // Set callback for when hub disconnects
 void DuploHub::setOnDisconnectedCallback(ConnectionCallback callback) {
     onDisconnectedCallback = callback;
+    DEBUG_LOG("DuploHub: OnDisconnected callback set");
 }
 
 // Implement the function to register the detected color callback
 void DuploHub::setDetectedColorCallback(DetectedColorCallback callback) {
     detectedColorCallback = callback;
+    DEBUG_LOG("DuploHub: DetectedColor callback set");
 }
 
 // Implement the function to register the detected speed callback
 void DuploHub::setDetectedSpeedCallback(DetectedSpeedCallback callback) {
     detectedSpeedCallback = callback;
+    DEBUG_LOG("DuploHub: DetectedSpeed callback set");
 }
 
 // Implement the function to register the detected voltage callback
 void DuploHub::setDetectedVoltageCallback(DetectedVoltageCallback callback) {
     detectedVoltageCallback = callback;
+    DEBUG_LOG("DuploHub: DetectedVoltage callback set");
 }
 
 // Start BLE task
@@ -540,15 +541,16 @@ void DuploHub::bleTaskFunction() {
 // BLE operations (runs in BLE task)
 void DuploHub::updateBLE() {
     static bool wasEverConnected = false;  // Track if we ever had a connection (BLE task context)
-    
+    static bool lastConnected = false;     // Track last connection state for callback
+
     // Get current BLE states from Lpf2Hub
     bool hubConnected = hub.isConnected();
     bool hubConnecting = hub.isConnecting();
     bool hubDisconnected = !hubConnecting && !hubConnected;
-    
+
     // Update thread-safe state variables
     updateConnectionState(hubConnected, hubConnecting);
-    
+
     // BLE Connection Management
     if (hubDisconnected) {
         if (!wasEverConnected) {
@@ -558,7 +560,7 @@ void DuploHub::updateBLE() {
         }
         hub.init();
     }
-    
+
     // Handle connection process
     if (hubConnecting) {
         hub.connectHub();
@@ -573,9 +575,30 @@ void DuploHub::updateBLE() {
             Serial.flush();
         }
     }
-    
-    // Process command queue
-    processCommandQueue();
+
+    // Connection state change detection and callback invocation (moved from update())
+    if (hubConnected && !lastConnected) {
+        DEBUG_LOG("BLE Task: Connection state changed: CONNECTED");
+        clearQueues();
+        if (onConnectedCallback != nullptr) {
+            DEBUG_LOG("DuploHub: Calling onConnectedCallback from BLE task...");
+            onConnectedCallback();
+            DEBUG_LOG("DuploHub: onConnectedCallback finished");
+        } else {
+            DEBUG_LOG("DuploHub: onConnectedCallback is nullptr");
+        }
+    } else if (!hubConnected && lastConnected) {
+        clearQueues();
+        DEBUG_LOG("BLE Task: Connection state changed: DISCONNECTED");
+        if (onDisconnectedCallback != nullptr) {
+            DEBUG_LOG("DuploHub: Calling onDisconnectedCallback from BLE task...");
+            onDisconnectedCallback();
+            DEBUG_LOG("DuploHub: onDisconnectedCallback finished");
+        } else {
+            DEBUG_LOG("DuploHub: onDisconnectedCallback is nullptr");
+        }
+    }
+    lastConnected = hubConnected;
 }
 
 // Process commands from the queue (runs in BLE task)
@@ -717,27 +740,24 @@ void DuploHub::update() {
         ensureBLETaskRunning();
         lastTaskCheck = millis();
     }
-    
-    // Check for connection state changes and trigger callbacks
-    bool currentlyConnected = isConnected();
-    
-    // Handle connection state changes
-    if (currentlyConnected && !wasConnected) {
-        // Connection established
-        DEBUG_LOG("Train hub is connected");
-        if (onConnectedCallback != nullptr) {
-            onConnectedCallback();
-        }
-    } else if (!currentlyConnected && wasConnected) {
-        // Connection lost
-        DEBUG_LOG("Train hub is disconnected");
-        if (onDisconnectedCallback != nullptr) {
-            onDisconnectedCallback();
-        }
-    }
-    
-    // Update the connection state for next iteration
-    wasConnected = currentlyConnected;
+    // No connection state change or callback logic here anymore; handled in BLE task
+    wasConnected = isConnected();
 }
 
+
+// Clear all pending commands and responses in the queues
+void DuploHub::clearQueues() {
+    if (commandQueue != nullptr) {
+        HubCommand cmd;
+        while (xQueueReceive(commandQueue, &cmd, 0) == pdTRUE) {
+            // Discard all commands
+        }
+    }
+    if (responseQueue != nullptr) {
+        HubResponse response;
+        while (xQueueReceive(responseQueue, &response, 0) == pdTRUE) {
+            // Discard all responses
+        }
+    }
+}
 
