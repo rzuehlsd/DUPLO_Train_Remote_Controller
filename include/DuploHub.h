@@ -1,9 +1,9 @@
 /**
  * DuploHub - A class to encapsulate LEGO DUPLO Train Hub functionality
- * 
+ *
  * (c) Copyright 2025
  * Released under MIT License
- * 
+ *
  */
 
 #ifndef DUPLO_HUB_H
@@ -15,10 +15,8 @@
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
 
-
-
-
-namespace DuploEnums {
+namespace DuploEnums
+{
 
     enum struct DuploTrainDeviceType
     {
@@ -32,16 +30,17 @@ namespace DuploEnums {
 
     enum struct DuploTrainHubPort
     {
-    MOTOR = 0x00,
-    LED = 0x11,
-    SPEAKER = 0x01,
-    COLOR = 0x12,
-    SPEEDOMETER = 0x13,
-    VOLTAGE = 0x14
+        MOTOR = 0x00,
+        LED = 0x11,
+        SPEAKER = 0x01,
+        COLOR = 0x12,
+        SPEEDOMETER = 0x13,
+        VOLTAGE = 0x14
     };
 
     // Command types for thread-safe communication
-    enum CommandType {
+    enum CommandType
+    {
         CMD_ACTIVATE_RGB_LIGHT,
         CMD_ACTIVATE_BASE_SPEAKER,
         CMD_MOTOR_SPEED,
@@ -55,7 +54,8 @@ namespace DuploEnums {
     };
 
     // Enum for available Duplo sounds
-    enum DuploSound {
+    enum DuploSound
+    {
         BRAKE = 3,
         STATION_DEPARTURE = 5,
         WATER_REFILL = 7,
@@ -64,7 +64,8 @@ namespace DuploEnums {
     };
 
     // Enum for available Duplo colors
-    enum DuploColor {
+    enum DuploColor
+    {
         BLACK = 0,
         PINK = 1,
         PURPLE = 2,
@@ -79,7 +80,8 @@ namespace DuploEnums {
     };
 
     // Enum for response types
-    enum ResponseType {
+    enum ResponseType
+    {
         Detected_Color,
         Detected_Speed,
         Detected_Voltage
@@ -98,160 +100,164 @@ typedef void (*DetectedSpeedCallback)(int detectedSpeed);
 // Add a typedef for the voltage callback
 typedef void (*DetectedVoltageCallback)(float detectedVoltage);
 
-
 // Command structure for queue communication
-typedef struct {
+typedef struct
+{
     DuploEnums::CommandType type;
-    union {
-        struct {
+    union
+    {
+        struct
+        {
             int speed;
         } motor;
-        struct {
+        struct
+        {
             DuploEnums::DuploColor color;
         } led;
-        struct {
-            char name[32];  // Fixed size for thread safety
+        struct
+        {
+            char name[32]; // Fixed size for thread safety
         } hubName;
-        struct {
+        struct
+        {
             int soundId;
         } sound;
     } data;
 } HubCommand;
 
 // Response structure for queue communication
-typedef struct {
+typedef struct
+{
     DuploEnums::ResponseType type;
-    union {
-        struct {
+    union
+    {
+        struct
+        {
             DuploEnums::DuploColor detectedColor;
         } colorResponse;
-        struct {
+        struct
+        {
             int detectedSpeed;
         } speedResponse;
-        struct {
+        struct
+        {
             float detectedVoltage;
         } voltageResponse;
         // Add other response types here as needed
     } data;
 } HubResponse;
 
-
 // Threshold definition for callback execution
-#define VOLTAGE_THRESHOLD  0.1f 
-#define SPEED_THRESHOLD  5
-
+#define VOLTAGE_THRESHOLD 0.1f
+#define SPEED_THRESHOLD 5
 
 // DuploHub class definition
 // This class encapsulates the functionality of the LEGO DUPLO Train Hub
 // It provides methods for connecting to the hub, controlling motors, lights, and sensors,
 // and handling BLE communication in a thread-safe manner.
-// The class uses FreeRTOS for task management and synchronization. 
+// The class uses FreeRTOS for task management and synchronization.
 
-class DuploHub {
+class DuploHub
+{
 private:
     myLegoHub hub;
     byte motorPort;
-    bool wasConnected;  // Track previous connection state
-    
+    bool wasConnected; // Track previous connection state
+
     // Static instance pointer for callback access
-    static DuploHub* instance;
-    
+    static DuploHub *instance;
+
     // Thread-safe state variables
     volatile bool connectionState;
     volatile bool connectingState;
-    
+
     // FreeRTOS synchronization objects
     SemaphoreHandle_t connectionMutex;
     QueueHandle_t commandQueue;
     QueueHandle_t responseQueue;
     TaskHandle_t bleTaskHandle;
-    
+
     // Callback functions
     ConnectionCallback onConnectedCallback;
     ConnectionCallback onDisconnectedCallback;
     DetectedColorCallback detectedColorCallback;
     DetectedSpeedCallback detectedSpeedCallback;
     DetectedVoltageCallback detectedVoltageCallback;
-    
+
     // Private methods for task management
     void initFreeRTOS();
     void cleanupFreeRTOS();
     void updateConnectionState(bool connected, bool connecting);
     void processCommandQueue();
     void clearQueues();
-    static void bleTaskWrapper(void* parameter);
+    static void bleTaskWrapper(void *parameter);
     void bleTaskFunction();
-    
-
-
 
 protected:
-      
     // Add declaration for colorSensorCallback to be registered with lpf2hub
     typedef void (*ColorSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
-    static void staticColorSensorCallback(void* hub, byte portNumber, DeviceType deviceType, uint8_t* pData);
-    
+    static void staticColorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
     // Add declaration for speedSensorCallback to be registered with lpf2hub
     typedef void (*SpeedSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
-    static void staticSpeedSensorCallback(void* hub, byte portNumber, DeviceType deviceType, uint8_t* pData);
-    
+    static void staticSpeedSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
     // Add declaration for voltageSensorCallback to be registered with lpf2hub
     typedef void (*VoltageSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
-    static void staticVoltageSensorCallback(void* hub, byte portNumber, DeviceType deviceType, uint8_t* pData);
-    
-    
+    static void staticVoltageSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
 public:
     // Constructor & Destructor
     DuploHub();
     DuploHub(byte port);
-    ~DuploHub();  // Destructor for cleanup
-    
+    ~DuploHub(); // Destructor for cleanup
+
     // Initialization and connection management
     void init();
-    void init(const std::string& address);
+    void init(const std::string &address);
 
-    bool isConnected();           // Thread-safe version
-    bool isConnecting();          // Thread-safe version
-    bool isDisconnected();        // Thread-safe version
-    
+    bool isConnected();    // Thread-safe version
+    bool isConnecting();   // Thread-safe version
+    bool isDisconnected(); // Thread-safe version
+
     // Task management
     void startBLETask();
     void stopBLETask();
-    void updateBLE();             // Called from BLE task
+    void updateBLE(); // Called from BLE task
     bool isBLETaskRunning();
-    void ensureBLETaskRunning();  // Auto-recovery mechanism
-    
+    void ensureBLETaskRunning(); // Auto-recovery mechanism
+
     // Hub information and settings
-    void setHubName(const char* name);
+    void setHubName(const char *name);
     std::string getHubAddress();
     std::string getHubName();
     void listDevicePorts();
-    
+
     // Motor control
     void setMotorPort(byte port);
     byte getMotorPort();
     void setMotorSpeed(int speed);
     void stopMotor();
-    
+
     // Sound control
-    void activateBaseSpeaker(); 
+    void activateBaseSpeaker();
     void playSound(int soundId);
 
     // Light control
     void activateRgbLight();
     void setLedColor(DuploEnums::DuploColor color);
-    
+
     // Direct DUPLO-specific implementations (low-level)
     void playSoundDirect(byte sound);
     void setLedColorDirect(Color color);
-    
+
     // port activation methods
     void activateBaseSpeakerDirect();
     void activateRgbLightDirect();
-    void activateColorSensor(); // Legacy method for backward compatibility
-    void activateSpeedSensor(); // Legacy method for backward compatibility
+    void activateColorSensor();   // Legacy method for backward compatibility
+    void activateSpeedSensor();   // Legacy method for backward compatibility
     void activateVoltageSensor(); // Voltage sensor activation
-   
+
     // Response Queue Callback registration
     void setOnConnectedCallback(ConnectionCallback callback);
     void setOnDisconnectedCallback(ConnectionCallback callback);
@@ -261,9 +267,6 @@ public:
 
     // Process response queue events in main task
     void processResponseQueue();
-    
-
-
 
     // BLE Task Function executed on second core
     void update();
