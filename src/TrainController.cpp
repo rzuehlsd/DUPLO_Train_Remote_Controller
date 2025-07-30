@@ -1,6 +1,11 @@
 /**
- * TrainController - A complete train control application using DuploHub class
- * Controls a DUPLO train with a motor connected to Port A of the Hub
+ * @file TrainController.cpp
+ * @brief Main application for LEGO DUPLO Train control using DuploHub on ESP32.
+ *
+ * This file implements the main application logic for controlling a LEGO DUPLO train
+ * using the DuploHub class and ESP32 dual-core architecture. It demonstrates a modular,
+ * event-driven approach to BLE-based train control, with robust handling of motor, LED,
+ * and sound commands, as well as real-time sensor feedback and user input.
  *
  * Architecture:
  * - TrainController: Main application logic (this file)
@@ -8,22 +13,42 @@
  * - Lpf2Hub: Low-level LEGO Powered Up protocol implementation
  *
  * Features:
- * - Multi-task architecture with BLE operations in background task (Core 0)
- * - Non-blocking demo sequence running in main loop (Core 1)
- * - Automatic connection management and recovery
- * - Real-time status monitoring and logging
+ * - Dual-core, multi-task architecture (BLE on Core 0, main loop on Core 1)
  * - Thread-safe command queuing for motor, LED, and sound control
- * - Sound tests integrated into the demo sequence
- * - Optimized BLE task responsiveness and reduced latency
- * - Improved sound playback timing
+ * - Real-time status monitoring, logging, and error handling
+ * - Automatic BLE connection management and recovery
+ * - Modular callback system for sensor and event handling
+ * - Sound and LED demo sequences
+ * - Emergency stop and user input via debounced buttons and potentiometer
  *
  * Demo Sequence:
- * - LED color changes (GREEN, RED)
+ * - LED color changes (GREEN, RED, etc.)
  * - Motor control (forward, backward, stop)
- * - Sound playback (HORN, BELL)
+ * - Sound playback (HORN, BELL, WATER_REFILL, etc.)
  *
- * (c) Copyright 2025
- * Released under MIT License
+ * @author Ralf Zühlsdorff
+ * @date 2025
+ *
+ * @copyright
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 #include "DuploHub.h"
@@ -36,17 +61,17 @@
 #define DELAY_TIME 100 // delay in ms
 
 // Pin declaration
-#define BTN_WASSER 25 // Taster 3 (blau)
-#define BTN_LICHT 27  // Taster 2 (weiß)
-#define BTN_SOUND 26  // Taster 1 (gelb)
-#define BTN_STOP 14   // Taster 4 (rot)
-#define POTI_SPEED 15 // Poti Fahrtregler (Analogeingang ADC13)
+#define BTN_WASSER 25 // Button 3 (blau)
+#define BTN_LICHT 27  // Button 2 (weiß)
+#define BTN_SOUND 26  // Button 1 (gelb)
+#define BTN_STOP 14   // Button 4 (rot)
+#define POTI_SPEED 15 // Throttle potentiometer (analog input ADC13)
 
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
 
-// Instanz der ezButton Klasse erstellen
-// Debouncing und Handling der Buttons
+// Create instances of the ezButton class
+// Debouncing and handling of the buttons
 Bounce2::Button pbSound = Bounce2::Button();
 Bounce2::Button pbLight = Bounce2::Button();
 Bounce2::Button pbWater = Bounce2::Button();
@@ -58,7 +83,11 @@ static int detectedColor = 0;
 static int potiSpeed = 0;
 static bool emergencyStop = false;
 
-// Buttons werden in der MainLoop aktualisiert
+/**
+ * @brief Handles button presses for sound, light, water, and emergency stop.
+ *
+ * Cycles through sounds and LED colors, triggers water sound, and toggles emergency stop.
+ */
 void handleButtons()
 {
     static int color = 0; // Color index for LED cycling
@@ -114,6 +143,9 @@ void handleButtons()
     }
 }
 
+/**
+ * @brief Updates the state of all debounced buttons.
+ */
 void updateButtons()
 {
     pbSound.update();
@@ -125,6 +157,9 @@ void updateButtons()
 static int POTI_MIN = 3584; // Minimum value for the potentiometer
 static int POTI_MAX = 512;
 
+/**
+ * @brief Reads and averages the potentiometer value, updates min/max calibration.
+ */
 void updatePoti()
 {
     // read adc value
@@ -139,13 +174,18 @@ void updatePoti()
     // DEBUG_LOG("poti = %d. min = %d, max = %d", potiSpeed, POTI_MIN, POTI_MAX);
 }
 
-// setzt die Geschwindigkeit des aktuell selektierten Zuges
+// Sets the speed of the currently selected train
 #define STEPSIZE 10
 #define MAX_SPEED 100
 #define NO_STEPS 10
 #define MIN_SPEED 20
 #define POTI_DELAY 500
 
+/**
+ * @brief Maps the potentiometer value to a train speed in the range -100 to 100.
+ * @param potiValue The raw potentiometer value to map.
+ * @return The mapped speed value.
+ */
 int mapPoti(int potiValue)
 {
     // Map the poti value to a speed range
@@ -161,6 +201,11 @@ int mapPoti(int potiValue)
 
 static int lastSpeed = 0; // Store last poti speed for comparison
 
+/**
+ * @brief Handles potentiometer input and sets train speed accordingly.
+ *
+ * Stops the train if emergency stop is active or if the potentiometer is in the zero zone.
+ */
 void handlePoti()
 {
     int lastSpeed = 0; // Store last poti speed for comparison
@@ -203,6 +248,10 @@ void handlePoti()
 }
 
 // Function to process the responseQueue and print detected color
+/**
+ * @brief Callback for detected color events from the color sensor.
+ * @param color The detected color (DuploEnums::DuploColor).
+ */
 static void detectedColorCb(DuploEnums::DuploColor color)
 {
     DEBUG_LOG("TrainController:  Detected Color: %d", color);
@@ -250,6 +299,10 @@ static void detectedColorCb(DuploEnums::DuploColor color)
 }
 
     // Function to process the responseQueue and print detected voltage
+    /**
+     * @brief Callback for detected voltage events from the voltage sensor.
+     * @param voltage The detected voltage value.
+     */
     static void detectedVoltageCb(float voltage)
     {
         static float meanVoltage[10] = {0.0f};
@@ -266,6 +319,10 @@ static void detectedColorCb(DuploEnums::DuploColor color)
     }
 
     // Function to process the responseQueue and print detected color
+    /**
+     * @brief Callback for detected speed events from the speed sensor.
+     * @param speed The detected speed value.
+     */
     static void detectedSpeedCb(int speed)
     {
         DEBUG_LOG("TrainController:  Detected Speed: %d", speed);
@@ -273,6 +330,11 @@ static void detectedColorCb(DuploEnums::DuploColor color)
     }
 
     // Callback function when hub connects
+    /**
+     * @brief Callback function called when the hub is connected.
+     *
+     * Activates all relevant ports and registers sensor callbacks.
+     */
     static void onHubConnected()
     {
         DEBUG_LOG("TrainController: Hub instance activated, starting demo sequence...");
@@ -308,11 +370,17 @@ static void detectedColorCb(DuploEnums::DuploColor color)
     }
 
     // Callback function when hub disconnects
+    /**
+     * @brief Callback function called when the hub is disconnected.
+     */
     static void onHubDisconnected()
     {
         DEBUG_LOG("TrainController: Hub disconnected - stopping all operations");
     }
 
+    /**
+     * @brief Initializes and configures all button instances for input and debouncing.
+     */
     void setupButtons()
     {
         // Initialize ezButton instances
@@ -333,6 +401,9 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         pbStop.setPressedState(LOW);
     }
 
+    /**
+     * @brief Arduino setup function. Initializes serial, memory info, buttons, DuploHub, and callbacks.
+     */
     void setup()
     {
         Serial.begin(115200);
@@ -360,6 +431,10 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         DEBUG_LOG("TrainController: Ready - BLE task running, waiting for hub connection...");
     }
 
+    /**
+     * @brief Periodically logs the status of the BLE task, hub connection, and CPU temperature.
+     * @param duploHub Reference to the DuploHub instance.
+     */
     void checkStatus(DuploHub & duploHub)
     {
         static unsigned long lastStatusUpdate = 0;
@@ -375,6 +450,9 @@ static void detectedColorCb(DuploEnums::DuploColor color)
     }
 
     // main loop
+    /**
+     * @brief Arduino main loop. Handles input, updates train state, and processes hub responses.
+     */
     void loop()
     {
         updateButtons();
@@ -390,5 +468,5 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         // Check Duplo Hub State
         checkStatus(duploHub);
 
-        delay(10); // Add a small delay to reduce CPU load
+        delay(10); // Add a small delay to reduce CPU load and prevent guru meditation error
     } // End of loop

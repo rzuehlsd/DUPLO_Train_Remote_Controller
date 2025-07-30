@@ -1,13 +1,41 @@
+
 /**
- * DuploHub - A class to encapsulate LEGO DUPLO Train Hub functionality
+ * @file DuploHub.cpp
+ * @brief Implementation of the DuploHub class for LEGO DUPLO Train Hub control on ESP32.
+ *
+ * This file provides the implementation for the DuploHub class, which encapsulates all
+ * functionality required to control a LEGO DUPLO Train Hub using the ESP32 platform.
  *
  * Features:
  * - Thread-safe command queuing for motor, LED, and sound control
  * - Optimized BLE task responsiveness and reduced latency
  * - Automatic connection management and recovery
+ * - Dual-core FreeRTOS architecture for robust, responsive operation
+ * - Modular callback system for sensors and events
  *
- * (c) Copyright 2025
- * Released under MIT License
+ * @author Michael
+ * @date 2025
+ *
+ * @copyright
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 #include "Arduino.h"
@@ -20,7 +48,11 @@
 // Initialize static instance pointer
 DuploHub *DuploHub::instance = nullptr;
 
-// Default constructor
+/**
+ * @brief Default constructor for DuploHub.
+ *
+ * Initializes the DuploHub instance with the default motor port and resets all state variables.
+ */
 DuploHub::DuploHub() : motorPort((byte)DuploEnums::DuploTrainHubPort::MOTOR), wasConnected(false),
                        connectionState(false), connectingState(false),
                        connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
@@ -31,7 +63,10 @@ DuploHub::DuploHub() : motorPort((byte)DuploEnums::DuploTrainHubPort::MOTOR), wa
     instance = this; // Set static instance pointer
 }
 
-// Constructor with port specification
+/**
+ * @brief Constructor for DuploHub with a specific motor port.
+ * @param port The port number to use for the motor.
+ */
 DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false),
                                 connectionState(false), connectingState(false),
                                 connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
@@ -42,7 +77,11 @@ DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false),
     instance = this; // Set static instance pointer
 }
 
-// Destructor
+/**
+ * @brief Destructor for DuploHub.
+ *
+ * Cleans up FreeRTOS resources and resets the static instance pointer.
+ */
 DuploHub::~DuploHub()
 {
     cleanupFreeRTOS();
@@ -52,7 +91,11 @@ DuploHub::~DuploHub()
     }
 }
 
-// Initialize FreeRTOS objects
+/**
+ * @brief Initialize FreeRTOS objects (mutexes and queues) for thread-safe operation.
+ *
+ * Creates mutexes and queues for command and response handling.
+ */
 void DuploHub::initFreeRTOS()
 {
     // Create mutex for thread-safe access to connection state
@@ -79,7 +122,11 @@ void DuploHub::initFreeRTOS()
     Serial.flush();
 }
 
-// Cleanup FreeRTOS objects
+/**
+ * @brief Clean up FreeRTOS objects (mutexes and queues).
+ *
+ * Deletes all created mutexes and queues and stops the BLE task if running.
+ */
 void DuploHub::cleanupFreeRTOS()
 {
     // Stop BLE task if running
@@ -112,7 +159,11 @@ void DuploHub::cleanupFreeRTOS()
     Serial.flush();
 }
 
-// Update connection state (thread-safe)
+/**
+ * @brief Update the connection state variables in a thread-safe manner.
+ * @param connected True if the hub is connected.
+ * @param connecting True if the hub is in the process of connecting.
+ */
 void DuploHub::updateConnectionState(bool connected, bool connecting)
 {
     if (connectionMutex != nullptr)
@@ -124,7 +175,11 @@ void DuploHub::updateConnectionState(bool connected, bool connecting)
     }
 }
 
-// Initialize the hub (thread-safe - can be called from main loop)
+/**
+ * @brief Initialize the DuploHub (thread-safe, can be called from main loop).
+ *
+ * Sets up FreeRTOS resources and starts the BLE task.
+ */
 void DuploHub::init()
 {
     DEBUG_LOG("DuploHub: Initializing ...");
@@ -135,7 +190,12 @@ void DuploHub::init()
     DEBUG_LOG("DuploHub: Initialization complete");
 }
 
-// Initialize the hub with specific address (thread-safe)
+/**
+ * @brief Initialize the DuploHub with a specific BLE address (not recommended).
+ * @param address The BLE address to use for the hub.
+ *
+ * Note: BLE task handles initialization; this is for future use.
+ */
 void DuploHub::init(const std::string &address)
 {
     DEBUG_LOG("WARNING: init(address) should not be called directly - BLE task handles initialization");
@@ -143,7 +203,10 @@ void DuploHub::init(const std::string &address)
     // This could be enhanced in Phase 3 to set a preferred address
 }
 
-// Check if hub is connected (thread-safe)
+/**
+ * @brief Check if the hub is connected (thread-safe).
+ * @return True if connected, false otherwise.
+ */
 bool DuploHub::isConnected()
 {
     if (connectionMutex != nullptr)
@@ -156,7 +219,10 @@ bool DuploHub::isConnected()
     return hub.isConnected(); // Fallback if mutex not initialized
 }
 
-// Check if hub is connecting (thread-safe)
+/**
+ * @brief Check if the hub is currently connecting (thread-safe).
+ * @return True if connecting, false otherwise.
+ */
 bool DuploHub::isConnecting()
 {
     if (connectionMutex != nullptr)
@@ -169,13 +235,19 @@ bool DuploHub::isConnecting()
     return hub.isConnecting(); // Fallback if mutex not initialized
 }
 
-// Check if hub is disconnected (thread-safe)
+/**
+ * @brief Check if the hub is disconnected (thread-safe).
+ * @return True if disconnected, false otherwise.
+ */
 bool DuploHub::isDisconnected()
 {
     return !isConnecting() && !isConnected();
 }
 
-// Set hub name (thread-safe)
+/**
+ * @brief Set the hub's name (thread-safe).
+ * @param name The new name for the hub.
+ */
 void DuploHub::setHubName(const char *name)
 {
     if (commandQueue != nullptr)
@@ -198,19 +270,28 @@ void DuploHub::setHubName(const char *name)
     }
 }
 
-// Get hub address
+/**
+ * @brief Get the BLE address of the hub.
+ * @return The hub's BLE address as a string.
+ */
 std::string DuploHub::getHubAddress()
 {
     return hub.getHubAddress().toString();
 }
 
-// Get hub name
+/**
+ * @brief Get the name of the hub.
+ * @return The hub's name as a string.
+ */
 std::string DuploHub::getHubName()
 {
     return hub.getHubName();
 }
 
-// Set LED color (thread-safe)
+/**
+ * @brief Set the LED color on the hub (thread-safe).
+ * @param color The color to set (DuploEnums::DuploColor).
+ */
 void DuploHub::setLedColor(DuploEnums::DuploColor color)
 {
     if (commandQueue != nullptr)
@@ -230,7 +311,10 @@ void DuploHub::setLedColor(DuploEnums::DuploColor color)
     }
 }
 
-// Set motor speed (thread-safe)
+/**
+ * @brief Set the motor speed (thread-safe).
+ * @param speed The speed to set for the motor.
+ */
 void DuploHub::setMotorSpeed(int speed)
 {
     if (commandQueue != nullptr)
@@ -251,7 +335,9 @@ void DuploHub::setMotorSpeed(int speed)
     }
 }
 
-// Stop motor (thread-safe)
+/**
+ * @brief Stop the motor (thread-safe).
+ */
 void DuploHub::stopMotor()
 {
     if (commandQueue != nullptr)
@@ -270,7 +356,10 @@ void DuploHub::stopMotor()
     }
 }
 
-// Play a sound on the Duplo Hub (thread-safe)
+/**
+ * @brief Play a sound on the Duplo Hub (thread-safe).
+ * @param soundId The ID of the sound to play.
+ */
 void DuploHub::playSound(int soundId)
 {
     DEBUG_LOG("DuploHub: playSound called with soundId: %d", soundId);
@@ -295,7 +384,9 @@ void DuploHub::playSound(int soundId)
     }
 }
 
-// Activate RGB light (thread-safe)
+/**
+ * @brief Activate the RGB light on the hub (thread-safe).
+ */
 void DuploHub::activateRgbLight()
 {
     if (commandQueue != nullptr)
@@ -314,7 +405,9 @@ void DuploHub::activateRgbLight()
     }
 }
 
-// Activate base speaker (thread-safe)
+/**
+ * @brief Activate the base speaker on the hub (thread-safe).
+ */
 void DuploHub::activateBaseSpeaker()
 {
     if (commandQueue != nullptr)
@@ -333,6 +426,9 @@ void DuploHub::activateBaseSpeaker()
     }
 }
 
+/**
+ * @brief Activate the color sensor on the hub (thread-safe).
+ */
 void DuploHub::activateColorSensor()
 {
     if (commandQueue != nullptr)
@@ -351,6 +447,9 @@ void DuploHub::activateColorSensor()
     }
 }
 
+/**
+ * @brief Activate the speed sensor on the hub (thread-safe).
+ */
 void DuploHub::activateSpeedSensor()
 {
     if (commandQueue != nullptr)
@@ -369,6 +468,9 @@ void DuploHub::activateSpeedSensor()
     }
 }
 
+/**
+ * @brief Activate the voltage sensor on the hub (thread-safe).
+ */
 void DuploHub::activateVoltageSensor()
 {
     if (commandQueue != nullptr)
@@ -387,7 +489,13 @@ void DuploHub::activateVoltageSensor()
     }
 }
 
-// Static callback function that can be passed to activatePortDevice
+/**
+ * @brief Static callback for color sensor events (used by activatePortDevice).
+ * @param hub Pointer to the hub instance.
+ * @param portNumber The port number of the sensor.
+ * @param deviceType The type of device triggering the callback.
+ * @param pData Pointer to the sensor data.
+ */
 void DuploHub::staticColorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData)
 {
     static int lastColor = -1;
@@ -429,7 +537,13 @@ void DuploHub::staticColorSensorCallback(void *hub, byte portNumber, DeviceType 
     }
 }
 
-// Static callback function that can be passed to activatePortDevice for speed sensor
+/**
+ * @brief Static callback for speed sensor events (used by activatePortDevice).
+ * @param hub Pointer to the hub instance.
+ * @param portNumber The port number of the sensor.
+ * @param deviceType The type of device triggering the callback.
+ * @param pData Pointer to the sensor data.
+ */
 void DuploHub::staticSpeedSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData)
 {
     static int lastSpeed = -1;
@@ -467,7 +581,13 @@ void DuploHub::staticSpeedSensorCallback(void *hub, byte portNumber, DeviceType 
     }
 }
 
-// Static callback function that can be passed to activatePortDevice for voltage sensor
+/**
+ * @brief Static callback for voltage sensor events (used by activatePortDevice).
+ * @param hub Pointer to the hub instance.
+ * @param portNumber The port number of the sensor.
+ * @param deviceType The type of device triggering the callback.
+ * @param pData Pointer to the sensor data.
+ */
 void DuploHub::staticVoltageSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData)
 {
     static float lastVoltage = -1.0f;
@@ -505,18 +625,29 @@ void DuploHub::staticVoltageSensorCallback(void *hub, byte portNumber, DeviceTyp
     }
 }
 
-// Set motor port
+/**
+ * @brief Set the motor port for the hub.
+ * @param port The port number to assign to the motor.
+ */
 void DuploHub::setMotorPort(byte port)
 {
     motorPort = port;
 }
 
-// Get motor port
+/**
+ * @brief Get the current motor port number.
+ * @return The port number assigned to the motor.
+ */
+
 byte DuploHub::getMotorPort()
 {
     return motorPort;
 }
 
+
+/**
+ * @brief List all device ports for the Duplo Train hub.
+ */
 void DuploHub::listDevicePorts()
 {
     DEBUG_LOG("Listing Duplo Train device ports:");
@@ -527,42 +658,59 @@ void DuploHub::listDevicePorts()
     DEBUG_LOG("Voltage Port: %d", (int)hub.getPortForDeviceType((byte)DuploEnums::DuploTrainDeviceType::VOLTAGE_SENSOR));
 }
 
-// Set callback for when hub connects
+/**
+ * @brief Set the callback function to be called when the hub connects.
+ * @param callback The function to call on connection.
+ */
 void DuploHub::setOnConnectedCallback(ConnectionCallback callback)
 {
     onConnectedCallback = callback;
     DEBUG_LOG("DuploHub: OnConnected callback set");
 }
 
-// Set callback for when hub disconnects
+/**
+ * @brief Set the callback function to be called when the hub disconnects.
+ * @param callback The function to call on disconnection.
+ */
 void DuploHub::setOnDisconnectedCallback(ConnectionCallback callback)
 {
     onDisconnectedCallback = callback;
     DEBUG_LOG("DuploHub: OnDisconnected callback set");
 }
 
-// Implement the function to register the detected color callback
+/**
+ * @brief Set the callback function for detected color events.
+ * @param callback The function to call when a color is detected.
+ */
 void DuploHub::setDetectedColorCallback(DetectedColorCallback callback)
 {
     detectedColorCallback = callback;
     DEBUG_LOG("DuploHub: DetectedColor callback set");
 }
 
-// Implement the function to register the detected speed callback
+/**
+ * @brief Set the callback function for detected speed events.
+ * @param callback The function to call when a speed is detected.
+ */
 void DuploHub::setDetectedSpeedCallback(DetectedSpeedCallback callback)
 {
     detectedSpeedCallback = callback;
     DEBUG_LOG("DuploHub: DetectedSpeed callback set");
 }
 
-// Implement the function to register the detected voltage callback
+/**
+ * @brief Set the callback function for detected voltage events.
+ * @param callback The function to call when a voltage is detected.
+ */
 void DuploHub::setDetectedVoltageCallback(DetectedVoltageCallback callback)
 {
     detectedVoltageCallback = callback;
     DEBUG_LOG("DuploHub: DetectedVoltage callback set");
 }
 
-// Start BLE task
+/**
+ * @brief Start the BLE task on core 0 (if not already running).
+ */
 void DuploHub::startBLETask()
 {
     if (bleTaskHandle == nullptr)
@@ -593,7 +741,9 @@ void DuploHub::startBLETask()
     }
 }
 
-// Stop BLE task
+/**
+ * @brief Stop the BLE task if it is running.
+ */
 void DuploHub::stopBLETask()
 {
     if (bleTaskHandle != nullptr)
@@ -604,13 +754,18 @@ void DuploHub::stopBLETask()
     }
 }
 
-// Check if BLE task is running
+/**
+ * @brief Check if the BLE task is currently running.
+ * @return True if running, false otherwise.
+ */
 bool DuploHub::isBLETaskRunning()
 {
     return bleTaskHandle != nullptr;
 }
 
-// Ensure BLE task is running (auto-recovery)
+/**
+ * @brief Ensure the BLE task is running; restart if not (auto-recovery).
+ */
 void DuploHub::ensureBLETaskRunning()
 {
     if (!isBLETaskRunning())
@@ -621,14 +776,19 @@ void DuploHub::ensureBLETaskRunning()
     }
 }
 
-// Static wrapper for BLE task (required for FreeRTOS)
+/**
+ * @brief Static wrapper for the BLE task (required for FreeRTOS).
+ * @param parameter Pointer to the DuploHub instance.
+ */
 void DuploHub::bleTaskWrapper(void *parameter)
 {
     DuploHub *instance = static_cast<DuploHub *>(parameter);
     instance->bleTaskFunction();
 }
 
-// BLE task function
+/**
+ * @brief BLE task function that handles BLE operations and command processing.
+ */
 void DuploHub::bleTaskFunction()
 {
     DEBUG_LOG("BLE Task: Started successfully");
@@ -656,7 +816,9 @@ void DuploHub::bleTaskFunction()
     }
 }
 
-// BLE operations (runs in BLE task)
+/**
+ * @brief Perform BLE operations, connection management, and callback invocation (runs in BLE task).
+ */
 void DuploHub::updateBLE()
 {
     static bool wasEverConnected = false; // Track if we ever had a connection (BLE task context)
@@ -737,7 +899,9 @@ void DuploHub::updateBLE()
     lastConnected = hubConnected;
 }
 
-// Process commands from the queue (runs in BLE task)
+/**
+ * @brief Process all commands from the command queue (runs in BLE task).
+ */
 void DuploHub::processCommandQueue()
 {
     if (commandQueue == nullptr)
@@ -833,7 +997,9 @@ void DuploHub::processCommandQueue()
     }
 }
 
-// Ensure alignment with the header file by adding support for HubResponse
+/**
+ * @brief Process all responses from the response queue and invoke registered callbacks.
+ */
 void DuploHub::processResponseQueue()
 {
     if (responseQueue == nullptr)
@@ -880,7 +1046,9 @@ void DuploHub::processResponseQueue()
     }
 }
 
-// Main update method - handles callbacks only (non-blocking)
+/**
+ * @brief Main update method; ensures BLE task is running and updates connection state.
+ */
 void DuploHub::update()
 {
     // Ensure BLE task is running (auto-recovery)
@@ -894,7 +1062,9 @@ void DuploHub::update()
     wasConnected = isConnected();
 }
 
-// Clear all pending commands and responses in the queues
+/**
+ * @brief Clear all pending commands and responses in the command and response queues.
+ */
 void DuploHub::clearQueues()
 {
     if (commandQueue != nullptr)
