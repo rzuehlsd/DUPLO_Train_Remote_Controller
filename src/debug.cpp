@@ -14,22 +14,22 @@ void SerialMUTEX() {
     }
 }
 
+
+
 void logWithMutex(const char* file, int line, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    char logMessage[256];
+    vsnprintf(logMessage, sizeof(logMessage), format, args);
+    va_end(args);
     if (serialMutex != NULL) {
         if (xSemaphoreTake(serialMutex, portMAX_DELAY) == pdTRUE) {
-            // Combine file, line, and format into a single formatted string
-            char extendedFormat[256];
-            snprintf(extendedFormat, sizeof(extendedFormat), "[%s:%d] %s", file, line, format);
-
-            char logMessage[512];
-            va_list args;
-            va_start(args, format);
-            vsnprintf(logMessage, sizeof(logMessage), extendedFormat, args); // Use vsnprintf to format the message
-            va_end(args);
-
-            Serial.println(logMessage); // Print the formatted message
+            Serial.println(logMessage);
             Serial.flush();
             xSemaphoreGive(serialMutex);
         }
+    } else {
+        Serial.println(logMessage);
+        Serial.flush();
     }
 }

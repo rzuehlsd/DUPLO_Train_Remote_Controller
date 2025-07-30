@@ -27,31 +27,104 @@
  */
 
 #include "DuploHub.h"
-#include "SystemMemory.h"
+#include "SystemMemory.h"    
+#include <Bounce2.h>  
 
 
-#define DEBUG 1 // Enable debug logging
+#undef DEBUG  // Enable debug logging
 #include "debug.h"
+
+
+
+#define DELAY_TIME  100     // delay in ms
+
+
+//Pin declaration
+#define BTN_WASSER 25       // Taster 3 (blau)           
+#define BTN_LICHT 27        // Taster 2 (weiß)
+#define BTN_SOUND 26        // Taster 1 (gelb)
+#define BTN_STOP 14         // Taster 4 (rot)
+#define POTI_SPEED 15       // Poti Fahrtregler (Analogeingang ADC13)
+
 
 
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
 
+// Instanz der ezButton Klasse erstellen
+// Debouncing und Handling der Buttons
+Bounce2::Button pbSound = Bounce2::Button();
+Bounce2::Button pbLight = Bounce2::Button();
+Bounce2::Button pbWater = Bounce2::Button();
+Bounce2::Button pbStop = Bounce2::Button();
+
+
+
+// Buttons werden in der MainLoop aktualisiert
+void handleButtons()
+{
+    static int color = 0; // Color index for LED cycling
+    static int duploSounds[] = {
+        DuploEnums::DuploSound::HORN,
+        DuploEnums::DuploSound::BRAKE,
+        DuploEnums::DuploSound::WATER_REFILL,
+        DuploEnums::DuploSound::STATION_DEPARTURE,
+        DuploEnums::DuploSound::STEAM
+    };
+    static int sound = 0; // Sound index for sound playback
+    
+
+    DEBUG_LOG("TrainController: Handling buttons...");
+ 
+    if(pbSound.pressed())   // Cycle through Duplo sounds
+    {
+        sound = (sound + 1) % 5;
+        duploHub.playSound((DuploEnums::DuploSound)duploSounds[sound]);
+        delay(DELAY_TIME);
+    }
+  
+    if(pbLight.pressed())   // cycle through LED colors
+    {
+        color = (color + 1) % 11; // Cycle through DuploColor enum values
+        duploHub.setLedColor((DuploEnums::DuploColor)color);
+        delay(DELAY_TIME);
+    }
+  
+    if(pbWater.pressed())
+    {
+     duploHub.playSound(DuploEnums::DuploSound::WATER_REFILL);
+      delay(DELAY_TIME);
+    }
+  
+    if(pbStop.pressed())    // emergency stop
+    {
+      duploHub.setMotorSpeed(0);
+      delay(DELAY_TIME);
+      duploHub.playSound((DuploEnums::DuploSound::BRAKE));
+      delay(DELAY_TIME);
+    }
+
+}
+
+
+void updateButtons() {
+    pbSound.update();
+    pbLight.update();
+    pbWater.update();
+    pbStop.update();
+}
 
 
 
 // Function to process the responseQueue and print detected color
 static void detectedColorCb(DuploEnums::DuploColor color) {
     DEBUG_LOG("TrainController:  Detected Color: %d", color);
-    delay(200); // Allow time for color detection to take effect
-    // duploHub.setLedColor(color);
 }
 
 
 // Function to process the responseQueue and print detected voltage
 static void detectedVoltageCb(float voltage) {
     DEBUG_LOG("TrainController:  Detected Voltage: %.2f V", voltage);
-    delay(200); // Allow time for voltage detection to take effect
 }
 
 
@@ -59,7 +132,6 @@ static void detectedVoltageCb(float voltage) {
 // Function to process the responseQueue and print detected color
 static void detectedSpeedCb(int speed) {
     DEBUG_LOG("TrainController:  Detected Speed: %d", speed);
-    delay(200); // Allow time for speed detection to take effect
 }
 
 
@@ -103,13 +175,27 @@ static void onHubConnected() {
 // Callback function when hub disconnects
 static void onHubDisconnected() {
     DEBUG_LOG("TrainController: Hub disconnected - stopping all operations");
-    
-    // Stop motor as safety measure (though hub is disconnected)
-    duploHub.stopMotor();
-    
-    DEBUG_LOG("TrainController: Train demo stopped due to disconnection");
+
 }
 
+void setupButtons() {
+    // Initialize ezButton instances
+    pbWater.attach(BTN_WASSER, INPUT_PULLUP);
+    pbLight.attach(BTN_LICHT, INPUT_PULLUP);
+    pbSound.attach(BTN_SOUND, INPUT_PULLUP);
+    pbStop.attach(BTN_STOP, INPUT_PULLUP);
+
+    // Set initial debounce time
+    pbWater.interval(5); // Debounce time in ms
+    pbLight.interval(5);
+    pbSound.interval(5);
+    pbStop.interval(5);
+
+    pbWater.setPressedState(LOW); // Set pressed state for buttons
+    pbLight.setPressedState(LOW);
+    pbSound.setPressedState(LOW);
+    pbStop.setPressedState(LOW);
+}
 
 
 
@@ -120,11 +206,14 @@ void setup() {
     Serial.begin(115200);
     delay(5000);
 
-    SerialMUTEX();
+    //  SerialMUTEX();
     DEBUG_LOG("TrainController (2 Core) : Starting up...");
     DEBUG_LOG("");
 
     printMemoryInfo();
+
+    // Button initialisieren
+    setupButtons();
 
     // Initialize DuploHub instance
     duploHub.init();
@@ -160,35 +249,16 @@ void checkStatus(DuploHub& duploHub) {
 
 // main loop
 void loop() {
-
-    static int color = 0; // Color index for LED cycling
-    static int sound = 3; // Sound index for sound playback
-    static int dir = 1; // Direction for motor control
+    updateButtons();
 
     if(duploHub.isConnected()) {
-        
-        // do something
-        duploHub.setLedColor((DuploEnums::DuploColor)color);
-        delay(1000);
-        color = (color + 1) % 11; // Cycle through colors 0-10
-
-        // Play sound
-        duploHub.playSound(DuploEnums::DuploSound::HORN);
-        delay(1000);
-        sound = (sound + 2) % 6;   // Cycle through sounds 0-4
-
-        // Set motor speed
-        duploHub.setMotorSpeed(dir *35);
-        delay(2000);
-        duploHub.stopMotor();
-        dir = -dir; // Reverse direction for next cycle
-
+        handleButtons();
         duploHub.processResponseQueue();
     }
-
+    
     // Check Duplo Hub State
-    checkStatus(duploHub);
+    // checkStatus(duploHub);
 
-    delay(1000); // Add a small delay to reduce CPU load
+    delay(10); // Add a small delay to reduce CPU load
 } // End of loop
 

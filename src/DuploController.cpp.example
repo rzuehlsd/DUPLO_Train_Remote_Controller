@@ -12,8 +12,8 @@
  * Pin Belegung am ESP32 WROOM32 LiOn 18650 Modul:
  * 
  * GPIO Pin     Funktion
- *  12          Taster 5 (Zugumschaltung)
- *  13          LED (Anzeige gewählter Zug)
+ *  12          Taster 5 (Zugumschaltung). nicht verbaut
+ *  13          LED (Anzeige gewählter Zug), nicht verbaut
  *  14          Taster 4 (rot)
  *  15          Poti Fahrtregler (Analogeingang ADC13)
  *  25          Taster 3 (blau)
@@ -266,7 +266,7 @@ void setup() {
   pbLight.attach(BTN_LICHT, INPUT_PULLUP);
   pbWater.attach(BTN_WASSER, INPUT_PULLUP);
   pbStop.attach(BTN_STOP, INPUT_PULLUP);
-  pbZug.attach(BTN_ZUG, INPUT_PULLUP);
+
 
   // Erstmalige Initialisierung der Hubs der Züge 
   // Dadurch wird die Suche nach Lego Hubs angestoßen
