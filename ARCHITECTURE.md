@@ -1,17 +1,25 @@
+
+
 # Technical Architecture Document
+
+**Author:** Ralf Zühlsdorff  
+**Copyright:** (c) 2025 Ralf Zühlsdorff  
+**License:** MIT License
 
 ## System Overview
 
-The DUPLO Train Controller implements a sophisticated three-layer, multi-task architecture optimized for ESP32 dual-core systems.
+
+The DUPLO Train Controller implements a robust, modular, event-driven architecture for LEGO train control, optimized for ESP32 dual-core systems. The design leverages FreeRTOS, thread-safe queues, and static callback wrappers to ensure reliable BLE communication, real-time sensor feedback, and responsive user control.
 
 ## Multi-Task Architecture
 
 ### Core Allocation Strategy
 
 ```
+
 ESP32 Core 0 (Protocol Core)        ESP32 Core 1 (Application Core)
 ├── BLE Stack (NimBLE)              ├── Arduino Main Loop
-├── BLE Task (DuploHub)             ├── TrainController Logic  
+├── BLE Task (DuploHub)             ├── TrainController Logic
 ├── FreeRTOS Scheduler              ├── Demo State Machine
 └── Hardware Interrupts             └── User Callbacks
 ```
@@ -29,11 +37,13 @@ ESP32 Core 0 (Protocol Core)        ESP32 Core 1 (Application Core)
 ### Synchronization Primitives
 
 ```cpp
+
 class DuploHub {
 private:
     SemaphoreHandle_t connectionMutex;    // Protects connection state
-    QueueHandle_t commandQueue;           // Inter-task communication
-    TaskHandle_t bleTaskHandle;           // Task lifecycle management
+    QueueHandle_t commandQueue;           // Main → BLE task commands
+    QueueHandle_t responseQueue;          // BLE task → Main responses/events
+    TaskHandle_t bleTaskHandle;           // BLE task lifecycle
     volatile bool connectionState;        // Atomic state variables
     volatile bool connectingState;
 };
@@ -42,18 +52,23 @@ private:
 ### Critical Sections
 
 ```cpp
+
 // Example: Thread-safe connection state access
 bool DuploHub::isConnected() {
-    xSemaphoreTake(connectionMutex, portMAX_DELAY);
-    bool state = connectionState;
-    xSemaphoreGive(connectionMutex);
-    return state;
+    if (connectionMutex != nullptr) {
+        xSemaphoreTake(connectionMutex, portMAX_DELAY);
+        bool state = connectionState;
+        xSemaphoreGive(connectionMutex);
+        return state;
+    }
+    return hub.isConnected(); // Fallback if mutex not initialized
 }
 ```
 
 ### Command Queue Protocol
 
 ```cpp
+
 // Command structure for inter-task communication
 typedef struct {
     CommandType type;           // Command identifier
@@ -61,8 +76,20 @@ typedef struct {
         struct { int speed; } motor;
         struct { Color color; } led;
         struct { char name[32]; } hubName;
+        // ... other command types ...
     } data;
 } HubCommand;
+
+// Response structure for BLE → Main communication
+typedef struct {
+    ResponseType type;          // Response identifier (e.g., Detected_Color, Detected_Speed)
+    union {
+        struct { int detectedColor; } colorResponse;
+        struct { int detectedSpeed; } speedResponse;
+        struct { float detectedVoltage; } voltageResponse;
+        // ... other response types ...
+    } data;
+} HubResponse;
 ```
 
 ## Memory Management
@@ -210,31 +237,32 @@ typedef struct {
 } SensorData;
 ```
 
-### Static Callback Integration
 
-The system uses static callback wrappers to bridge Lpf2Hub callbacks with the queue system:
+### Static Callback Integration and Event Flow
+
+The system uses static callback wrappers to bridge Lpf2Hub callbacks (BLE task context) with the response queue for event-driven communication:
 
 ```cpp
 // Static callback wrapper (called by Lpf2Hub in BLE task context)
-void DuploHubExtended::colorSensorCallbackWrapper(void *hub, byte port, 
-                                                  DeviceType type, uint8_t *data) {
-    Lpf2Hub *lpf2Hub = (Lpf2Hub *)hub;
-    
-    if (type == DeviceType::COLOR_DISTANCE_SENSOR) {
-        int color = lpf2Hub->parseColor(data);
-        
-        // Create sensor data structure
-        SensorData sensorData;
-        sensorData.type = SENSOR_COLOR;
-        sensorData.port = port;
-        sensorData.timestamp = millis();
-        sensorData.data.colorSensor.color = color;
-        
-        // Queue to main task (non-blocking)
-        g_duploHubInstance->queueSensorData(sensorData);
+void DuploHub::staticColorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData) {
+    static int lastColor = -1;
+    myLegoHub *myHub = (myLegoHub *)hub;
+    if (deviceType == DeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR) {
+        int detectedColor = myHub->parseColor(pData);
+        if (lastColor != detectedColor) {
+            lastColor = detectedColor;
+            if (instance != nullptr && instance->responseQueue != nullptr) {
+                HubResponse response;
+                response.type = DuploEnums::ResponseType::Detected_Color;
+                response.data.colorResponse.detectedColor = detectedColor;
+                xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100));
+            }
+        }
     }
 }
 ```
+
+This pattern is used for all sensor types (color, speed, voltage, etc.), ensuring that all sensor events are queued to the main task for processing and user callback invocation.
 
 ### Performance Characteristics
 
@@ -260,97 +288,49 @@ Static buffers & variables;            // ~200 bytes
 // Total additional memory:            ~1864 bytes (~1.8 KB)
 ```
 
-### Sensor Processing Flow
+
+### Event-Driven Sensor and Command Processing Flow
 
 1. **Sensor Activation** (Main → BLE):
    ```cpp
-   duploHub.activateColorSensor(port) → CMD_ACTIVATE_COLOR_SENSOR → commandQueue
-   → BLE Task: hub.activatePortDevice(port, callbackWrapper)
+   duploHub.activateColorSensor() → CMD_ACTIVATE_COLOR_SENSOR → commandQueue
+   → BLE Task: hub.activatePortDevice(port, staticColorSensorCallback)
    ```
 
 2. **Sensor Data Flow** (BLE → Main):
    ```cpp
-   DUPLO Sensor → Lpf2Hub callback → Static wrapper → SensorData struct
-   → sensorQueue → Main Task: processSensorData() → User callback
+   DUPLO Sensor → Lpf2Hub callback → Static wrapper → HubResponse struct
+   → responseQueue → Main Task: processResponseQueue() → User callback
    ```
 
 3. **Error Handling**:
    ```cpp
-   if (xQueueSend(sensorQueue, &data, 0) != pdTRUE) {
-       Serial.println("WARNING: Sensor data queue full - dropping data");
+   if (xQueueSend(responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE) {
+       DEBUG_LOG("WARNING: Failed to queue sensor response");
    }
    ```
 
-### Adding New Hub Types
 
-```cpp
-// Extend command types
-enum CommandType {
-    CMD_MOTOR_SPEED,
-    CMD_STOP_MOTOR,
-    CMD_SET_LED_COLOR,
-    CMD_NEW_DEVICE_TYPE    // Add new commands here
-};
+### Extending Command and Response Types
 
-// Extend command data
-typedef struct {
-    CommandType type;
-    union {
-        // Existing commands...
-        struct { 
-            byte devicePort;
-            int deviceValue;
-        } newDevice;
-    } data;
-} HubCommand;
-```
+To add new device types or features, extend the `CommandType` and `ResponseType` enums and their associated data unions in `HubCommand` and `HubResponse`.
+
 
 ### Multiple Hub Support
 
-The architecture can be extended to support multiple hubs:
-
-```cpp
-class MultiHubController {
-private:
-    std::vector<DuploHub*> hubs;
-    TaskHandle_t coordinatorTask;
-    
-public:
-    void addHub(DuploHub* hub);
-    void broadcastCommand(HubCommand cmd);
-    void sendToHub(int hubId, HubCommand cmd);
-};
-```
+The architecture can be extended to support multiple hubs by managing multiple `DuploHub` instances and coordinating their command/response queues.
 
 ## Debug and Monitoring Infrastructure
 
-### Logging Levels
 
-```cpp
-#define LOG_LEVEL_ERROR   1
-#define LOG_LEVEL_WARNING 2  
-#define LOG_LEVEL_INFO    3
-#define LOG_LEVEL_DEBUG   4
+### Logging and Debugging
 
-#if LOG_LEVEL >= LOG_LEVEL_DEBUG
-#define DEBUG_PRINT(x) Serial.print(x)
-#else
-#define DEBUG_PRINT(x)
-#endif
-```
+The system uses a mutex-protected debug logging macro (`DEBUG_LOG`) for thread-safe output from both main and BLE tasks. Logging levels can be adjusted for error, warning, info, and debug output.
+
 
 ### Runtime Statistics
 
-```cpp
-// Available system monitoring
-void printSystemStats() {
-    Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
-    Serial.printf("BLE task stack high water mark: %d\n", 
-                  uxTaskGetStackHighWaterMark(bleTaskHandle));
-    Serial.printf("Queue messages waiting: %d\n", 
-                  uxQueueMessagesWaiting(commandQueue));
-}
-```
+System monitoring functions (e.g., `printMemoryInfo()`) are available to report free heap, BLE task stack usage, and queue status for debugging and performance analysis.
 
 ## Security Considerations
 
@@ -363,6 +343,11 @@ void printSystemStats() {
 - No dynamic code execution
 - Fixed-size buffers prevent overflows
 - Input validation on all external data
+
+
+## Documentation and Code Quality
+
+All major classes and functions are documented using Doxygen-style comments, including parameter and return value descriptions. Each file includes author, copyright, and the full MIT license.
 
 ## Future Enhancement Opportunities
 
