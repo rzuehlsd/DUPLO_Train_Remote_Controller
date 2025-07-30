@@ -17,6 +17,7 @@
 
 ---
 
+
 ## 📋 Table of Contents
 
 - [Project Overview](#project-overview)
@@ -33,6 +34,8 @@
 - [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
+- [Architecture](ARCHITECTURE.md)
+- [Changelog](CHANGELOG.md)
 
 ---
 
