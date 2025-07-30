@@ -1,6 +1,3 @@
-#ifndef MY_LEGO_HUB_H
-#define MY_LEGO_HUB_H
-
 /*
  * myLegoHub.h
  *
