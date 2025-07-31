@@ -52,7 +52,18 @@ This project implements a robust, multi-layered, event-driven train controller f
 For a detailed technical breakdown, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
+## Future Improvements
 
+- Small Duplo Train Controller based on ESP32-S3 with integrated batterie management
+- small Lithium Batterie
+- Instead of Poti use of rotary encoder
+- Function to record actions and play back (Buttons Rec, Play)
+- small Duplo sized printed housing
+- only 3 Buttons to control LED, sound and emergency stop
+- Function to pair with train (store ID and use when connecting)
+
+
+---
 ## 🏗️ System Architecture
 
 ### Multi-Task Processing with Bidirectional Communication
