@@ -244,31 +244,6 @@ bool DuploHub::isDisconnected()
     return !isConnecting() && !isConnected();
 }
 
-/**
- * @brief Set the hub's name (thread-safe).
- * @param name The new name for the hub.
- */
-void DuploHub::setHubName(const char *name)
-{
-    if (commandQueue != nullptr)
-    {
-        HubCommand cmd;
-        cmd.type = DuploEnums::CMD_SET_HUB_NAME;
-        strncpy(cmd.data.hubName.name, name, sizeof(cmd.data.hubName.name) - 1);
-        cmd.data.hubName.name[sizeof(cmd.data.hubName.name) - 1] = '\0'; // Ensure null termination
-
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
-        {
-            DEBUG_LOG("WARNING: Failed to queue hub name command");
-        }
-    }
-    else
-    {
-        char hubName[strlen(name) + 1];
-        strcpy(hubName, name);
-        hub.setHubName(hubName);
-    }
-}
 
 /**
  * @brief Get the BLE address of the hub.
@@ -288,6 +263,35 @@ std::string DuploHub::getHubName()
     return hub.getHubName();
 }
 
+
+
+/**
+ * @brief Set the hub's name (thread-safe).
+ * @param name The new name for the hub.
+ */
+void DuploHub::setHubName(const char *name)
+{
+    if (commandQueue != nullptr)
+    {
+        HubCommand cmd;
+        cmd.type = CommandType::CMD_SET_HUB_NAME;
+        strncpy(cmd.data.hubName.name, name, sizeof(cmd.data.hubName.name) - 1);
+        cmd.data.hubName.name[sizeof(cmd.data.hubName.name) - 1] = '\0'; // Ensure null termination
+
+        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        {
+            DEBUG_LOG("WARNING: Failed to queue hub name command");
+        }
+    }
+    else
+    {
+        char hubName[strlen(name) + 1];
+        strcpy(hubName, name);
+        hub.setHubName(hubName);
+    }
+}
+
+
 /**
  * @brief Set the LED color on the hub (thread-safe).
  * @param color The color to set (DuploEnums::DuploColor).
@@ -297,7 +301,7 @@ void DuploHub::setLedColor(DuploEnums::DuploColor color)
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_SET_LED_COLOR;
+        cmd.type = CommandType::CMD_SET_LED_COLOR;
         cmd.data.led.color = (DuploEnums::DuploColor)color;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
@@ -320,7 +324,7 @@ void DuploHub::setMotorSpeed(int speed)
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_MOTOR_SPEED;
+        cmd.type = CommandType::CMD_MOTOR_SPEED;
         cmd.data.motor.speed = speed;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
@@ -343,7 +347,7 @@ void DuploHub::stopMotor()
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_STOP_MOTOR;
+        cmd.type = CommandType::CMD_STOP_MOTOR;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
@@ -366,7 +370,7 @@ void DuploHub::playSound(int soundId)
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_PLAY_SOUND;
+        cmd.type = CommandType::CMD_PLAY_SOUND;
         cmd.data.sound.soundId = soundId;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
@@ -392,7 +396,7 @@ void DuploHub::activateRgbLight()
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_ACTIVATE_RGB_LIGHT;
+        cmd.type = CommandType::CMD_ACTIVATE_RGB_LIGHT;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
@@ -413,7 +417,7 @@ void DuploHub::activateBaseSpeaker()
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_ACTIVATE_BASE_SPEAKER;
+        cmd.type = CommandType::CMD_ACTIVATE_BASE_SPEAKER;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
@@ -434,7 +438,7 @@ void DuploHub::activateColorSensor()
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_ACTIVATE_COLOR_SENSOR;
+        cmd.type = CommandType::CMD_ACTIVATE_COLOR_SENSOR;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
@@ -455,7 +459,7 @@ void DuploHub::activateSpeedSensor()
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_ACTIVATE_SPEED_SENSOR;
+        cmd.type = CommandType::CMD_ACTIVATE_SPEED_SENSOR;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
@@ -476,7 +480,7 @@ void DuploHub::activateVoltageSensor()
     if (commandQueue != nullptr)
     {
         HubCommand cmd;
-        cmd.type = DuploEnums::CMD_ACTIVATE_VOLTAGE_SENSOR;
+        cmd.type = CommandType::CMD_ACTIVATE_VOLTAGE_SENSOR;
 
         if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
@@ -516,7 +520,7 @@ void DuploHub::staticColorSensorCallback(void *hub, byte portNumber, DeviceType 
                 if (instance != nullptr && instance->responseQueue != nullptr)
                 {
                     HubResponse response;
-                    response.type = DuploEnums::ResponseType::Detected_Color;
+                    response.type = ResponseType::Detected_Color;
                     response.data.colorResponse.detectedColor = (DuploEnums::DuploColor)detectedColor;
 
                     if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE)
@@ -561,7 +565,7 @@ void DuploHub::staticSpeedSensorCallback(void *hub, byte portNumber, DeviceType 
             if (instance != nullptr && instance->responseQueue != nullptr)
             {
                 HubResponse response;
-                response.type = DuploEnums::ResponseType::Detected_Speed;
+                response.type = ResponseType::Detected_Speed;
                 response.data.speedResponse.detectedSpeed = myHub->MapSpeedometer(detectedSpeed);
 
                 if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE)
@@ -605,7 +609,7 @@ void DuploHub::staticVoltageSensorCallback(void *hub, byte portNumber, DeviceTyp
             if (instance != nullptr && instance->responseQueue != nullptr)
             {
                 HubResponse response;
-                response.type = DuploEnums::ResponseType::Detected_Voltage;
+                response.type = ResponseType::Detected_Voltage;
                 response.data.voltageResponse.detectedVoltage = detectedVoltage;
 
                 if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE)
@@ -921,69 +925,69 @@ void DuploHub::processCommandQueue()
 
         switch (cmd.type)
         {
-        case DuploEnums::CMD_MOTOR_SPEED:
+        case CommandType::CMD_MOTOR_SPEED:
             DEBUG_LOG("BLE Task: Setting motor speed to %d", cmd.data.motor.speed);
             hub.setBasicMotorSpeed((byte)DuploEnums::DuploTrainHubPort::MOTOR, cmd.data.motor.speed);
             delay(20); // Reduced delay for faster motor response
             DEBUG_LOG("DuploHub: setBasicMotorSpeed completed at: %lu", millis());
             break;
 
-        case DuploEnums::CMD_STOP_MOTOR:
+        case CommandType::CMD_STOP_MOTOR:
             DEBUG_LOG("BLE Task: Stopping motor");
             hub.stopBasicMotor((byte)DuploEnums::DuploTrainHubPort::MOTOR);
             delay(20); // Reduced delay for faster stop
             DEBUG_LOG("DuploHub: stopBasicMotor completed at: %lu", millis());
             break;
 
-        case DuploEnums::CMD_SET_LED_COLOR:
+        case CommandType::CMD_SET_LED_COLOR:
             DEBUG_LOG("BLE Task: Setting LED color to %d", cmd.data.led.color);
             hub.setLedColor((Color)cmd.data.led.color);
             delay(200); // Ensure LED color command is processed
             DEBUG_LOG("DuploHub: setLEDColor completed at: %lu", millis());
             break;
 
-        case DuploEnums::CMD_SET_HUB_NAME:
+        case CommandType::CMD_SET_HUB_NAME:
             DEBUG_LOG("BLE Task: Setting hub name to %s", cmd.data.hubName.name);
             hub.setHubName(cmd.data.hubName.name);
             delay(200); // Ensure hub name command is processed
             DEBUG_LOG("DuploHub: setHubName completed at: %lu", millis());
             break;
 
-        case DuploEnums::CMD_PLAY_SOUND:
+        case CommandType::CMD_PLAY_SOUND:
             DEBUG_LOG("BLE Task: Playing sound with ID %d", cmd.data.sound.soundId);
             hub.playSound((byte)cmd.data.sound.soundId);
             delay(200); // Ensure sound command is processed
             DEBUG_LOG("DuploHub: playSound completed at: %lu", millis());
             break;
 
-        case DuploEnums::CMD_ACTIVATE_RGB_LIGHT:
+        case CommandType::CMD_ACTIVATE_RGB_LIGHT:
             DEBUG_LOG("BLE Task: Activating RGB light");
             hub.activateRgbLight();
             delay(200); // Ensure RGB light command is processed
             DEBUG_LOG("DuploHub: activateRgbLight completed");
             break;
 
-        case DuploEnums::CMD_ACTIVATE_BASE_SPEAKER:
+        case CommandType::CMD_ACTIVATE_BASE_SPEAKER:
             DEBUG_LOG("BLE Task: Activating base speaker");
             hub.activateBaseSpeaker();
             delay(200); // Ensure base speaker command is processed
             DEBUG_LOG("DuploHub: activateBaseSpeaker completed");
             break;
 
-        case DuploEnums::CMD_ACTIVATE_COLOR_SENSOR:
+        case CommandType::CMD_ACTIVATE_COLOR_SENSOR:
             DEBUG_LOG("BLE Task: Activating color sensor");
             hub.activatePortDevice((byte)DuploEnums::DuploTrainHubPort::COLOR, staticColorSensorCallback);
             delay(200);
             DEBUG_LOG("DuploHub: setColorSensorCallback completed");
             break;
 
-        case DuploEnums::CMD_ACTIVATE_SPEED_SENSOR:
+        case CommandType::CMD_ACTIVATE_SPEED_SENSOR:
             DEBUG_LOG("BLE Task: Activating speed sensor");
             hub.activatePortDevice((byte)DuploEnums::DuploTrainHubPort::SPEEDOMETER, staticSpeedSensorCallback);
             delay(200);
             DEBUG_LOG("DuploHub: setSpeedSensorCallback completed");
             break;
-        case DuploEnums::CMD_ACTIVATE_VOLTAGE_SENSOR:
+        case CommandType::CMD_ACTIVATE_VOLTAGE_SENSOR:
             DEBUG_LOG("BLE Task: Activating voltage sensor");
             hub.activatePortDevice((byte)DuploEnums::DuploTrainHubPort::VOLTAGE, staticVoltageSensorCallback);
             delay(200);
@@ -1012,7 +1016,7 @@ void DuploHub::processResponseQueue()
     {
         switch (response.type)
         {
-        case DuploEnums::ResponseType::Detected_Color:
+        case Detected_Color:
             DEBUG_LOG("Detected Color: %d", response.data.colorResponse.detectedColor);
             if (detectedColorCallback != nullptr)
             {
@@ -1021,7 +1025,7 @@ void DuploHub::processResponseQueue()
             }
             break;
 
-        case DuploEnums::ResponseType::Detected_Speed:
+        case Detected_Speed:
             DEBUG_LOG("Detected Speed: %d", response.data.speedResponse.detectedSpeed);
             if (detectedSpeedCallback != nullptr)
             {
@@ -1030,7 +1034,7 @@ void DuploHub::processResponseQueue()
             }
             break;
 
-        case DuploEnums::ResponseType::Detected_Voltage:
+        case Detected_Voltage:
             DEBUG_LOG("Detected Voltage: %.2f V", response.data.voltageResponse.detectedVoltage);
             if (detectedVoltageCallback != nullptr)
             {

@@ -41,98 +41,25 @@
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
 
-namespace DuploEnums
+// Command types for thread-safe communication
+enum CommandType
 {
-    // Device types for Duplo Train Hub
-    enum struct DuploTrainDeviceType
-    {
-        DUPLO_TRAIN_BASE_MOTOR = 41,
-        DUPLO_TRAIN_BASE_SPEAKER = 42,
-        DUPLO_TRAIN_BASE_COLOR_SENSOR = 43,
-        DUPLO_TRAIN_BASE_SPEEDOMETER = 44,
-        VOLTAGE_SENSOR = 20,
-        LIGHT = 8
-    };
-
-    // Port enumeration for Duplo Train Hub
-    // These ports correspond to the physical ports on the DUPLO Train Hub
-    // and are used for device activation and communication.
-    enum struct DuploTrainHubPort
-    {
-        MOTOR = 0x00,
-        LED = 0x11,
-        SPEAKER = 0x01,
-        COLOR = 0x12,
-        SPEEDOMETER = 0x13,
-        VOLTAGE = 0x14
-    };
-
-    // Command types for thread-safe communication
-    enum CommandType
-    {
-        CMD_ACTIVATE_RGB_LIGHT,
-        CMD_ACTIVATE_BASE_SPEAKER,
-        CMD_MOTOR_SPEED,
-        CMD_STOP_MOTOR,
-        CMD_SET_LED_COLOR,
-        CMD_SET_HUB_NAME,
-        CMD_PLAY_SOUND,
-        CMD_ACTIVATE_COLOR_SENSOR,
-        CMD_ACTIVATE_SPEED_SENSOR,
-        CMD_ACTIVATE_VOLTAGE_SENSOR
-    };
-
-    // Enum for available Duplo sounds
-    enum DuploSound
-    {
-        BRAKE = 3,
-        STATION_DEPARTURE = 5,
-        WATER_REFILL = 7,
-        HORN = 9,
-        STEAM = 10
-    };
-
-    // Enum for available Duplo colors
-    enum DuploColor
-    {
-        BLACK = 0,
-        PINK = 1,
-        PURPLE = 2,
-        BLUE = 3,
-        LIGHT_BLUE = 4,
-        CYAN = 5,
-        GREEN = 6,
-        YELLOW = 7,
-        ORANGE = 8,
-        RED = 9,
-        WHITE = 10
-    };
-
-    // Enum for response types
-    enum ResponseType
-    {
-        Detected_Color,
-        Detected_Speed,
-        Detected_Voltage
-    };
-}
-
-// Callback function types
-typedef void (*ConnectionCallback)();
-
-// Add a typedef for the detected color callback
-typedef void (*DetectedColorCallback)(DuploEnums::DuploColor);
-
-// Add a typedef for the speed callback
-typedef void (*DetectedSpeedCallback)(int detectedSpeed);
-
-// Add a typedef for the voltage callback
-typedef void (*DetectedVoltageCallback)(float detectedVoltage);
+    CMD_ACTIVATE_RGB_LIGHT,
+    CMD_ACTIVATE_BASE_SPEAKER,
+    CMD_MOTOR_SPEED,
+    CMD_STOP_MOTOR,
+    CMD_SET_LED_COLOR,
+    CMD_SET_HUB_NAME,
+    CMD_PLAY_SOUND,
+    CMD_ACTIVATE_COLOR_SENSOR,
+    CMD_ACTIVATE_SPEED_SENSOR,
+    CMD_ACTIVATE_VOLTAGE_SENSOR
+};
 
 // Command structure for queue communication
 typedef struct
 {
-    DuploEnums::CommandType type;
+    CommandType type;
     union
     {
         struct
@@ -154,10 +81,18 @@ typedef struct
     } data;
 } HubCommand;
 
+// Enum for response types
+enum ResponseType
+{
+    Detected_Color,
+    Detected_Speed,
+    Detected_Voltage
+};
+
 // Response structure for queue communication
 typedef struct
 {
-    DuploEnums::ResponseType type;
+    ResponseType type;
     union
     {
         struct
@@ -186,8 +121,8 @@ typedef struct
 // and handling BLE communication in a thread-safe manner.
 // The class uses FreeRTOS for task management and synchronization.
 
-
-class DuploHub {
+class DuploHub
+{
 private:
     myLegoHub hub; ///< Underlying hardware interface
     byte motorPort;
@@ -199,12 +134,14 @@ private:
     QueueHandle_t commandQueue;
     QueueHandle_t responseQueue;
     TaskHandle_t bleTaskHandle;
+
     // Callback functions
     ConnectionCallback onConnectedCallback;
     ConnectionCallback onDisconnectedCallback;
     DetectedColorCallback detectedColorCallback;
     DetectedSpeedCallback detectedSpeedCallback;
     DetectedVoltageCallback detectedVoltageCallback;
+
     // Internal task management
     void initFreeRTOS();
     void cleanupFreeRTOS();
@@ -213,6 +150,11 @@ private:
     void clearQueues();
     static void bleTaskWrapper(void *parameter);
     void bleTaskFunction();
+    void startBLETask();
+    void stopBLETask();
+    void updateBLE();
+    void ensureBLETaskRunning();
+
 protected:
     // Sensor callback registration for lpf2hub
     typedef void (*ColorSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
@@ -221,6 +163,7 @@ protected:
     static void staticSpeedSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
     typedef void (*VoltageSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
     static void staticVoltageSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
 public:
     /**
      * @brief Default constructor.
@@ -250,6 +193,13 @@ public:
     void init(const std::string &address);
 
     /**
+     * @brief Check if BLE task is running (thread-safe).
+     * @return true if BLE task is running.
+     */
+    bool isBLETaskRunning();
+
+
+    /**
      * @brief Check if hub is connected (thread-safe).
      * @return true if connected.
      */
@@ -267,31 +217,6 @@ public:
      */
     bool isDisconnected();
 
-    /**
-     * @brief Start the BLE task on Core 0.
-     */
-    void startBLETask();
-
-    /**
-     * @brief Stop the BLE task.
-     */
-    void stopBLETask();
-
-    /**
-     * @brief Update BLE state (called from BLE task).
-     */
-    void updateBLE();
-
-    /**
-     * @brief Check if BLE task is running.
-     * @return true if running.
-     */
-    bool isBLETaskRunning();
-
-    /**
-     * @brief Ensure BLE task is running (auto-recovery).
-     */
-    void ensureBLETaskRunning();
 
     /**
      * @brief Set the hub name.
