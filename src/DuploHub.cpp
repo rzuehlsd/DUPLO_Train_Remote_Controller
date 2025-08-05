@@ -41,8 +41,9 @@
 #include "Arduino.h"
 #include "DuploHub.h"
 #include "LegoinoCommon.h"
+#include "esp_timer.h"
 
-#undef DEBUG // Enable debug logging
+#undef DEBUG// Enable debug logging
 #include "debug.h"
 
 // Initialize static instance pointer
@@ -263,7 +264,148 @@ std::string DuploHub::getHubName()
     return hub.getHubName();
 }
 
+/**
+ * @brief Enable or disable command recording
+ * @param enable True to start recording commands, false to stop
+ */
+void DuploHub::recordCommands(bool enable)
+{
+    recordCommandsEnabled = enable;
+    if (enable)
+    {
+        commandBuffer.clear(); // Clear existing commands when starting new recording
+        DEBUG_LOG("DuploHub: Command recording ENABLED. Buffer cleared.");
+    }
+    else
+    {
+        DEBUG_LOG("DuploHub: Command recording DISABLED. Buffer contains %zu commands.", commandBuffer.size());
+    }
+}
 
+/**
+ * @brief Start replaying all previously recorded commands with normalized timestamps
+ * The first command timestamp is set to 0 and all other timestamps are adjusted
+ * to maintain relative timing differences
+ */
+void DuploHub::replayCommands()
+{
+    if (commandBuffer.empty())
+    {
+        DEBUG_LOG("DuploHub: No commands to replay. Buffer is empty.");
+        return;
+    }
+    
+    if (replaying)
+    {
+        DEBUG_LOG("DuploHub: Replay already in progress. Stopping current replay first.");
+        stopReplay();
+    }
+    
+    recordCommandsEnabled = false;
+    
+    // Normalize timestamps - set first command to time 0 and adjust all others relative to it
+    if (!commandBuffer.empty())
+    {
+        originalStartTime = commandBuffer[0].timestamp;
+        
+        for (auto& cmd : commandBuffer)
+        {
+            cmd.timestamp -= originalStartTime;  // Normalize to start at 0
+        }
+        
+        DEBUG_LOG("DuploHub: Normalized %zu commands. First command now at timestamp 0.", commandBuffer.size());
+    }
+    
+    // Initialize replay state
+    replaying = true;
+    replayIndex = 0;
+    replayStartTime = esp_timer_get_time();
+    
+    DEBUG_LOG("DuploHub: Started replay of %zu recorded commands. Use getNextReplayCommand() to retrieve commands.", commandBuffer.size());
+}
+
+/**
+ * @brief Get the next command to replay if it's time to execute it
+ * @return Pointer to the next command if ready, nullptr if no command ready or replay finished
+ */
+const HubCommand* DuploHub::getNextReplayCommand()
+{
+    if (!replaying || replayIndex >= commandBuffer.size())
+    {
+        return nullptr;
+    }
+    
+    uint64_t currentTime = esp_timer_get_time();
+    uint64_t elapsedTime = currentTime - replayStartTime;
+    
+    const HubCommand& nextCmd = commandBuffer[replayIndex];
+    
+    // Check if it's time to play this command
+    if (elapsedTime >= nextCmd.timestamp)
+    {
+        replayIndex++;
+        
+        DEBUG_LOG("DuploHub: Retrieved replay command %zu/%zu (type: %d) at elapsed time %llu us", 
+                  replayIndex, commandBuffer.size(), nextCmd.type, elapsedTime);
+        
+        // Check if replay is complete
+        if (replayIndex >= commandBuffer.size())
+        {
+            DEBUG_LOG("DuploHub: Replay completed. All %zu commands processed.", commandBuffer.size());
+            replaying = false;
+        }
+        
+        return &nextCmd;
+    }
+    
+    return nullptr; // Not yet time to play this command
+}
+
+/**
+ * @brief Check if command replay is currently active
+ * @return true if replay is in progress, false otherwise
+ */
+bool DuploHub::isReplayActive() const
+{
+    return replaying;
+}
+
+/**
+ * @brief Stop the current command replay
+ */
+void DuploHub::stopReplay()
+{
+    if (replaying)
+    {
+        DEBUG_LOG("DuploHub: Stopping replay at command %zu/%zu", replayIndex, commandBuffer.size());
+        replaying = false;
+        replayIndex = 0;
+        replayStartTime = 0;
+    }
+    else
+    {
+        DEBUG_LOG("DuploHub: No active replay to stop.");
+    }
+}
+
+/**
+ * @brief Wrapper around xQueueSend that optionally records commands to commandBuffer
+ * @param cmd The command to send and optionally record
+ * @param timeout Timeout for queue send operation
+ * @return Result of xQueueSend operation
+ */
+BaseType_t DuploHub::sendCommand(const HubCommand& cmd, TickType_t timeout)
+{
+    // Store command in buffer if recording is enabled
+    if (recordCommandsEnabled)
+    {
+        commandBuffer.push_back(cmd);
+        DEBUG_LOG("DuploHub: Command %d recorded to buffer. Buffer size: %zu", cmd.type, commandBuffer.size());
+    }
+    
+    // Send command to queue
+    return xQueueSend(commandQueue, &cmd, timeout);
+}
 
 /**
  * @brief Set the hub's name (thread-safe).
@@ -275,10 +417,11 @@ void DuploHub::setHubName(const char *name)
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_SET_HUB_NAME;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
         strncpy(cmd.data.hubName.name, name, sizeof(cmd.data.hubName.name) - 1);
         cmd.data.hubName.name[sizeof(cmd.data.hubName.name) - 1] = '\0'; // Ensure null termination
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue hub name command");
         }
@@ -302,9 +445,10 @@ void DuploHub::setLedColor(DuploEnums::DuploColor color)
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_SET_LED_COLOR;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
         cmd.data.led.color = (DuploEnums::DuploColor)color;
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue LED color command");
         }
@@ -325,9 +469,10 @@ void DuploHub::setMotorSpeed(int speed)
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_MOTOR_SPEED;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
         cmd.data.motor.speed = speed;
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue motor speed command");
         }
@@ -348,8 +493,9 @@ void DuploHub::stopMotor()
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_STOP_MOTOR;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue stop motor command");
         }
@@ -371,9 +517,10 @@ void DuploHub::playSound(int soundId)
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_PLAY_SOUND;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
         cmd.data.sound.soundId = soundId;
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue play sound command");
         }
@@ -397,8 +544,9 @@ void DuploHub::activateRgbLight()
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_ACTIVATE_RGB_LIGHT;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue activate RGB light command");
         }
@@ -418,8 +566,9 @@ void DuploHub::activateBaseSpeaker()
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_ACTIVATE_BASE_SPEAKER;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue activate base speaker command");
         }
@@ -439,8 +588,9 @@ void DuploHub::activateColorSensor()
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_ACTIVATE_COLOR_SENSOR;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue activate color sensor command");
         }
@@ -460,8 +610,9 @@ void DuploHub::activateSpeedSensor()
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_ACTIVATE_SPEED_SENSOR;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue activate speed sensor command");
         }
@@ -481,8 +632,9 @@ void DuploHub::activateVoltageSensor()
     {
         HubCommand cmd;
         cmd.type = CommandType::CMD_ACTIVATE_VOLTAGE_SENSOR;
+        cmd.timestamp = esp_timer_get_time(); // Add timestamp in microseconds
 
-        if (xQueueSend(commandQueue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE)
+        if (sendCommand(cmd, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             DEBUG_LOG("WARNING: Failed to queue activate voltage sensor command");
         }

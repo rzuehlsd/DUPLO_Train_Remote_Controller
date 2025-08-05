@@ -35,6 +35,8 @@
 #ifndef DUPLO_HUB_H
 #define DUPLO_HUB_H
 
+
+#include <vector>
 #include "myLegoHub.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -60,6 +62,7 @@ enum CommandType
 typedef struct
 {
     CommandType type;
+    long timestamp; // Timestamp for command execution order
     union
     {
         struct
@@ -134,6 +137,16 @@ private:
     QueueHandle_t commandQueue;
     QueueHandle_t responseQueue;
     TaskHandle_t bleTaskHandle;
+    
+    // Command buffer for record / replay processing
+    std::vector<HubCommand> commandBuffer;
+    
+    // Replay state management
+    bool replaying = false;
+    size_t replayIndex = 0;
+    int64_t replayStartTime = 0;
+    int64_t originalStartTime = 0;
+    bool recordCommandsEnabled = false;
 
     // Callback functions
     ConnectionCallback onConnectedCallback;
@@ -148,6 +161,10 @@ private:
     void updateConnectionState(bool connected, bool connecting);
     void processCommandQueue();
     void clearQueues();
+    
+    // Command queue wrapper for recording functionality
+    BaseType_t sendCommand(const HubCommand& cmd, TickType_t timeout);
+    
     static void bleTaskWrapper(void *parameter);
     void bleTaskFunction();
     void startBLETask();
@@ -252,6 +269,36 @@ public:
      * @return Motor port.
      */
     byte getMotorPort();
+
+    /**
+     * @brief Enable or disable command recording for replay functionality
+     * @param enable True to start recording commands, false to stop recording
+     */
+    void recordCommands(bool enable);
+
+    /**
+     * @brief Start replaying all previously recorded commands with normalized timestamps
+     * The first command timestamp is set to 0 and all other timestamps are adjusted
+     * to maintain relative timing differences
+     */
+    void replayCommands();
+    
+    /**
+     * @brief Get the next command to replay if it's time to execute it
+     * @return Pointer to the next command if ready, nullptr if no command ready or replay finished
+     */
+    const HubCommand* getNextReplayCommand();
+    
+    /**
+     * @brief Check if replay is currently active
+     * @return true if replaying, false otherwise
+     */
+    bool isReplayActive() const;
+    
+    /**
+     * @brief Stop the current replay operation
+     */
+    void stopReplay();
 
     /**
      * @brief Set the motor speed.
