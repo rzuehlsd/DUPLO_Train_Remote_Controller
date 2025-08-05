@@ -313,12 +313,23 @@ void DuploHub::replayCommands()
             cmd.timestamp -= originalStartTime;  // Normalize to start at 0
         }
         
-        DEBUG_LOG("DuploHub: Normalized %zu commands. First command now at timestamp 0.", commandBuffer.size());
+        // Calculate total sequence duration (time of last command + some buffer)
+        if (commandBuffer.size() > 1)
+        {
+            sequenceDuration = commandBuffer.back().timestamp + 1000000; // Add 1 second buffer
+        }
+        else
+        {
+            sequenceDuration = 1000000; // Default 1 second for single command
+        }
+        
+        DEBUG_LOG("DuploHub: Normalized %zu commands. Sequence duration: %lld us", commandBuffer.size(), sequenceDuration);
     }
     
     // Initialize replay state
     replaying = true;
     replayIndex = 0;
+    replayCycle = 0;
     replayStartTime = esp_timer_get_time();
     
     DEBUG_LOG("DuploHub: Started replay of %zu recorded commands. Use getNextReplayCommand() to retrieve commands.", commandBuffer.size());
@@ -330,30 +341,43 @@ void DuploHub::replayCommands()
  */
 const HubCommand* DuploHub::getNextReplayCommand()
 {
-    if (!replaying || replayIndex >= commandBuffer.size())
+    if (!replaying || commandBuffer.empty())
     {
         return nullptr;
     }
     
     uint64_t currentTime = esp_timer_get_time();
-    uint64_t elapsedTime = currentTime - replayStartTime;
+    uint64_t totalElapsedTime = currentTime - replayStartTime;
+    
+    // Calculate which cycle we're in and the position within that cycle
+    uint64_t cycleTime = totalElapsedTime % sequenceDuration;
+    int currentCycle = totalElapsedTime / sequenceDuration;
+    
+    // Check if we've moved to a new cycle
+    if (currentCycle > replayCycle)
+    {
+        replayCycle = currentCycle;
+        replayIndex = 0; // Reset to start of command buffer for new cycle
+        DEBUG_LOG("DuploHub: Starting replay cycle %d", replayCycle + 1);
+    }
+    
+    // Ensure replayIndex is within bounds
+    if (replayIndex >= commandBuffer.size())
+    {
+        replayIndex = 0;
+    }
     
     const HubCommand& nextCmd = commandBuffer[replayIndex];
     
-    // Check if it's time to play this command
-    if (elapsedTime >= nextCmd.timestamp)
+    // Check if it's time to play this command in the current cycle
+    if (cycleTime >= nextCmd.timestamp)
     {
         replayIndex++;
         
-        DEBUG_LOG("DuploHub: Retrieved replay command %zu/%zu (type: %d) at elapsed time %llu us", 
-                  replayIndex, commandBuffer.size(), nextCmd.type, elapsedTime);
+        DEBUG_LOG("DuploHub: Retrieved replay command %zu/%zu (type: %d) cycle: %d, cycle time: %llu us", 
+                  replayIndex, commandBuffer.size(), nextCmd.type, replayCycle + 1, cycleTime);
         
-        // Check if replay is complete
-        if (replayIndex >= commandBuffer.size())
-        {
-            DEBUG_LOG("DuploHub: Replay completed. All %zu commands processed.", commandBuffer.size());
-            replaying = false;
-        }
+        // No need to handle end-of-cycle here, it's handled by the cycle calculation above
         
         return &nextCmd;
     }
@@ -377,10 +401,12 @@ void DuploHub::stopReplay()
 {
     if (replaying)
     {
-        DEBUG_LOG("DuploHub: Stopping replay at command %zu/%zu", replayIndex, commandBuffer.size());
+        DEBUG_LOG("DuploHub: Stopping replay at command %zu/%zu, cycle %d", replayIndex, commandBuffer.size(), replayCycle + 1);
         replaying = false;
         replayIndex = 0;
+        replayCycle = 0;
         replayStartTime = 0;
+        sequenceDuration = 0;
     }
     else
     {

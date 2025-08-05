@@ -73,12 +73,13 @@ void StatusLED::setOff()
 {
     _color = CRGB::Black;
     _blinking = false;
-    if (!_blinking && _initialized)
+    if (_initialized)
     {
-        _leds[0] = _color;
+        _leds[0] = CRGB::Black;
         FastLED.show();
     }
 }
+
 
 /**
  * @brief Update the LED state - call this regularly in your main loop

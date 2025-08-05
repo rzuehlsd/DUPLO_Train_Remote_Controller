@@ -146,6 +146,8 @@ private:
     size_t replayIndex = 0;
     int64_t replayStartTime = 0;
     int64_t originalStartTime = 0;
+    int64_t sequenceDuration = 0;  // Total duration of command sequence
+    int replayCycle = 0;           // Current replay cycle number
     bool recordCommandsEnabled = false;
 
     // Callback functions

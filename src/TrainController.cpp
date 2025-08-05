@@ -115,7 +115,6 @@ static bool playback = false;
 
 ADCButtons guiButtons = ADCButtons(ADC_PIN);
 
-
 // Button numbers for GUI buttons
 enum GUIButtons
 {
@@ -129,7 +128,7 @@ enum GUIButtons
 // mapping between Duplo Colors and CRGB Colors
 // index corresponds to DuploColor enum values
 // 0 = BLACK, 1 = PINK, 2 = PURPLE, etc.
- CRGB::HTMLColorCode rgbColors[] = {
+CRGB::HTMLColorCode rgbColors[] = {
     CRGB::Black,
     CRGB::Pink,
     CRGB::Purple,
@@ -140,11 +139,7 @@ enum GUIButtons
     CRGB::Yellow,
     CRGB::Orange,
     CRGB::Red,
-    CRGB::White
-};
-
-
-
+    CRGB::White};
 
 /**
  * @brief Handles button presses for sound, light, water, and emergency stop.
@@ -163,8 +158,8 @@ void handleButtons(int btn_no, bool pressed)
         DuploEnums::DuploSound::STEAM};
     static int sound = 0; // Sound index for sound playbook
 
-    if(pressed == false || !duploHub.isConnected())
-    return;
+    if (pressed == false || !duploHub.isConnected())
+        return;
 
     // DEBUG_LOG("TrainController: Button %d %s", btn_no, pressed ? "pressed" : "released");
     // Update button states based on button number
@@ -178,8 +173,8 @@ void handleButtons(int btn_no, bool pressed)
         break;
     case BUTTON_LIGHT:
         color = (color + 1) % 11; // Cycle through DuploColor enum values
-        statusLed.setColor(rgbColors[color]); 
-        statusLed.setBlinking(false); 
+        statusLed.setColor(rgbColors[color]);
+        statusLed.setBlinking(false);
         duploHub.setLedColor((DuploEnums::DuploColor)color);
         DEBUG_LOG("TrainController: Light button pressed, color %d", color);
         delay(DELAY_TIME);
@@ -187,35 +182,36 @@ void handleButtons(int btn_no, bool pressed)
     case BUTTON_RECORD:
         DEBUG_LOG("TrainController: start or stop recording");
         recording = !recording; // Toggle recording state
-        // stop playback if recording is active 
+        // stop playback if recording is active
         if (recording)
         {
             DEBUG_LOG("TrainController: Recording started");
-            statusLed.setColor(rgbColors[10]); 
-            statusLed.setBlinking(true, 250, 250); 
+            statusLed.setColor(rgbColors[10]);
+            statusLed.setBlinking(true, 250, 250);
             duploHub.recordCommands(true); // Start recording commands
-            delay(DELAY_TIME);                                   // Allow time for sound to play
+            delay(DELAY_TIME);             // Allow time for sound to play
         }
         else
         {
             DEBUG_LOG("TrainController: Recording stopped");
             duploHub.recordCommands(false); // Stop recording commands
             statusLed.setOff();
-            delay(DELAY_TIME);                                          // Allow time for sound to play
+            delay(DELAY_TIME); // Allow time for sound to play
         }
         break;
     case BUTTON_PLAY:
         DEBUG_LOG("TrainController: start or stop playback");
         // disable plaback when recording is active
-        if(recording)
+        if (recording)
         {
             DEBUG_LOG("TrainController: Playback disabled while recording is active");
             return; // Ignore playback if recording is active
         }
         playback = !playback; // Toggle playback state
-        if(playback){
+        if (playback)
+        {
             duploHub.replayCommands();
-            statusLed.setColor(rgbColors[3]); 
+            statusLed.setColor(rgbColors[3]);
             statusLed.setBlinking(true, 250, 250);
         }
         else
@@ -224,14 +220,14 @@ void handleButtons(int btn_no, bool pressed)
             statusLed.setOff();
         }
         DEBUG_LOG("TrainController: Playback %s", playback ? "started" : "stopped");
-        delay(DELAY_TIME); 
+        delay(DELAY_TIME);
         break;
     case BUTTON_STOP:
         emergencyStop = !emergencyStop; // Toggle emergency stop state
 
         if (emergencyStop)
-        {   
-            statusLed.setColor(rgbColors[9]); 
+        {
+            statusLed.setColor(rgbColors[9]);
             statusLed.setBlinking(true, 1000, 250);
             duploHub.playSound((DuploEnums::DuploSound::BRAKE)); // Play brake sound
             delay(DELAY_TIME);                                   // Allow time for sound to play
@@ -245,7 +241,7 @@ void handleButtons(int btn_no, bool pressed)
             delay(DELAY_TIME);                                               // Allow time for sound to play
             duploHub.setLedColor(DuploEnums::DuploColor::GREEN);             // Set LED to green
             statusLed.setOff();
-            delay(DELAY_TIME);                                               // Allow time for sound to play
+            delay(DELAY_TIME); // Allow time for sound to play
         }
 
         DEBUG_LOG("TrainController: Emergency stop %s", emergencyStop ? "activated" : "deactivated");
@@ -259,8 +255,7 @@ void handleButtons(int btn_no, bool pressed)
 
 // Sets the speed of the currently selected train
 #define MIN_SPEED 20
-#define POTI_DELAY 500
-#define STEPSIZE 10
+#define POTI_DELAY 250
 
 static int lastSpeed = 0; // holds current mapping of poti setting to speed
 
@@ -289,24 +284,22 @@ void handleEncoder(long speed)
         lastCall = millis(); // Update last call time
 
         // if emergencyStop triggered or poti in zero zone
-        if (speed >= -MIN_SPEED && speed <= MIN_SPEED)
+        if (speed > -MIN_SPEED && speed < MIN_SPEED)
         {
             duploHub.setMotorSpeed(0);
             lastSpeed = 0; // Reset lastSpeed to avoid repeated calls
-            delay(DELAY_TIME);
-            DEBUG_LOG("TrainController: Set motor speed to %d", lastSpeed);
         }
-
-        if (abs(lastSpeed - speed) > STEPSIZE) // if speed changed
+        else
         {
             // train speed changed
             duploHub.setMotorSpeed(speed);
             lastSpeed = speed;
-            delay(DELAY_TIME);
-            DEBUG_LOG("TrainController: Set motor speed to %d", lastSpeed);
         }
+        delay(DELAY_TIME);
+        DEBUG_LOG("TrainController: Set motor speed to %d", lastSpeed);
     }
 }
+
 
 // Function to process the responseQueue and print detected color
 /**
@@ -321,13 +314,13 @@ static void detectedColorCb(DuploEnums::DuploColor color)
     {
     case DuploEnums::DuploColor::BLACK:
         duploHub.setLedColor(DuploEnums::DuploColor::BLACK);
-        statusLed.setColor(CRGB::Black); 
+        statusLed.setColor(CRGB::Black);
         delay(DELAY_TIME);
         break;
     case DuploEnums::DuploColor::RED:
         emergencyStop = !emergencyStop; // Toggle emergency stop state
-        statusLed.setColor(CRGB::Red); 
-        statusLed.setBlinking(true, 250, 250, 3);  // Set LED color to white
+        statusLed.setColor(CRGB::Red);
+        statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
         delay(DELAY_TIME);
         duploHub.playSound((DuploEnums::DuploSound::BRAKE)); // Play brake sound
         delay(DELAY_TIME);                                   // Allow time for sound to play
@@ -336,16 +329,16 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         break;
     case DuploEnums::DuploColor::YELLOW:
         duploHub.setLedColor(DuploEnums::DuploColor::YELLOW);
-        statusLed.setColor(CRGB::Yellow); 
-        statusLed.setBlinking(true, 250, 250, 3);  // Set LED color to white
+        statusLed.setColor(CRGB::Yellow);
+        statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
         delay(DELAY_TIME);
         duploHub.playSound((DuploEnums::DuploSound::HORN)); // Play horn sound
         delay(DELAY_TIME);                                  // Allow time for sound to play
         break;
     case DuploEnums::DuploColor::BLUE:
         duploHub.setLedColor(DuploEnums::DuploColor::BLUE);
-        statusLed.setColor(CRGB::Blue); 
-        statusLed.setBlinking(true, 250, 250, 3);  // Set LED color to white
+        statusLed.setColor(CRGB::Blue);
+        statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
         delay(DELAY_TIME);
         duploHub.stopMotor();
         delay(DELAY_TIME);                                          // Stop the motor
@@ -358,8 +351,8 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         for (int i = 0; i < 3; i++)
         {
             duploHub.setLedColor(DuploEnums::DuploColor::WHITE);
-            statusLed.setColor(CRGB::White); 
-            statusLed.setBlinking(true, 250, 250, 3);  // Set LED color to white
+            statusLed.setColor(CRGB::White);
+            statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
         }
         break;
     }
@@ -405,7 +398,7 @@ static void detectedSpeedCb(int speed)
 static void onHubConnected()
 {
     DEBUG_LOG("TrainController: Hub instance activated, starting demo sequence...");
-    statusLed.setColor(CRGB::Blue);        // Set color to red
+    statusLed.setColor(CRGB::Blue);           // Set color to red
     statusLed.setBlinking(true, 200, 300, 3); // Blink: 200ms on, 300ms off
 
 #ifdef DEBUG
@@ -434,6 +427,9 @@ static void onHubConnected()
     DEBUG_LOG("DuploHub: All callbacks registered");
 
     duploHub.setHubName("DuploTrain_1");
+    delay(200);
+    
+
     DEBUG_LOG("TrainController: Connected to hub: %s", duploHub.getHubName().c_str());
     DEBUG_LOG("TrainController: Hub address: %s", duploHub.getHubAddress().c_str());
 }
@@ -445,15 +441,14 @@ static void onHubConnected()
 static void onHubDisconnected()
 {
     DEBUG_LOG("TrainController: Hub disconnected - stopping all operations");
-    statusLed.setColor(CRGB::Orange);        // Set color to red
+    statusLed.setColor(CRGB::Orange);         // Set color to red
     statusLed.setBlinking(true, 200, 300, 3); // Blink: 200ms on, 300ms off
 }
 
-
 void replayNextCommand()
 {
-    const HubCommand* cmd = duploHub.getNextReplayCommand();
-    if(cmd == nullptr)
+    const HubCommand *cmd = duploHub.getNextReplayCommand();
+    if (cmd == nullptr)
     {
         DEBUG_LOG("TrainController: Not the time to replay command");
         return; // Exit if not in replay mode
@@ -464,50 +459,50 @@ void replayNextCommand()
         // Execute the command based on its type
         switch (cmd->type)
         {
-            case CMD_MOTOR_SPEED:
-                duploHub.setMotorSpeed(cmd->data.motor.speed);
-                break;
-            case CMD_STOP_MOTOR:
-                duploHub.stopMotor();
-                break;
-            case CMD_SET_LED_COLOR:
-                duploHub.setLedColor(cmd->data.led.color);
-                break;
-            case CMD_PLAY_SOUND:
-                duploHub.playSound(cmd->data.sound.soundId);
-                break;
-            case CMD_SET_HUB_NAME:
-                duploHub.setHubName(cmd->data.hubName.name);
-                break;
-            case CMD_ACTIVATE_RGB_LIGHT:
-                duploHub.activateRgbLight();
-                break;
-            case CMD_ACTIVATE_BASE_SPEAKER:
-                duploHub.activateBaseSpeaker();
-                break;
-            case CMD_ACTIVATE_COLOR_SENSOR:
-                duploHub.activateColorSensor();
-                break;
-            case CMD_ACTIVATE_SPEED_SENSOR:
-                duploHub.activateSpeedSensor();
-                break;
-            case CMD_ACTIVATE_VOLTAGE_SENSOR:
-                duploHub.activateVoltageSensor();
-                break;
-            default:
-                DEBUG_LOG("TrainController: Unknown command type %d in replay", cmd->type);
-                break;
+        case CMD_MOTOR_SPEED:
+            duploHub.setMotorSpeed(cmd->data.motor.speed);
+            break;
+        case CMD_STOP_MOTOR:
+            duploHub.stopMotor();
+            break;
+        case CMD_SET_LED_COLOR:
+            duploHub.setLedColor(cmd->data.led.color);
+            break;
+        case CMD_PLAY_SOUND:
+            duploHub.playSound(cmd->data.sound.soundId);
+            break;
+        case CMD_SET_HUB_NAME:
+            duploHub.setHubName(cmd->data.hubName.name);
+            break;
+        case CMD_ACTIVATE_RGB_LIGHT:
+            duploHub.activateRgbLight();
+            break;
+        case CMD_ACTIVATE_BASE_SPEAKER:
+            duploHub.activateBaseSpeaker();
+            break;
+        case CMD_ACTIVATE_COLOR_SENSOR:
+            duploHub.activateColorSensor();
+            break;
+        case CMD_ACTIVATE_SPEED_SENSOR:
+            duploHub.activateSpeedSensor();
+            break;
+        case CMD_ACTIVATE_VOLTAGE_SENSOR:
+            duploHub.activateVoltageSensor();
+            break;
+        default:
+            DEBUG_LOG("TrainController: Unknown command type %d in replay", cmd->type);
+            break;
         }
         DEBUG_LOG("TrainController: Replayed command type %d", cmd->type);
     }
-    else
-    {
-        playback = false; // Reset playback state
-        duploHub.stopReplay();
-        statusLed.setColor(CRGB::Black); 
-        statusLed.setBlinking(false);  // Set LED color to white
-        DEBUG_LOG("TrainController: No more commands to replay, stopping replay");
-    }
+    // else
+    // {
+    //     playback = false; // Reset playback state
+    //     duploHub.stopReplay();
+    //     statusLed.setBlinking(false); // Stop blinking first
+    //     statusLed.setOff();           // Then turn LED off
+    //     DEBUG_LOG("TrainController: No more commands to replay, stopping replay");
+    // }
 }
 
 /**
@@ -525,33 +520,27 @@ void setup()
     printMemoryInfo();
 
     // Initialize onboard RGB LED
-    statusLed.begin();                    // Initialize FastLED
-    statusLed.setBrightness(100);         // Set brightness
-    statusLed.setColor(CRGB::Red);        // Set color to red
+    statusLed.begin();                     // Initialize FastLED
+    statusLed.setBrightness(100);          // Set brightness
+    statusLed.setColor(CRGB::Red);         // Set color to red
     statusLed.setBlinking(true, 200, 300); // Blink: 200ms on, 300ms off
 
-
     // setup push buttons and register callback
-    guiButtons.addButton(BUTTON_RECORD, 790); // Button 1: Record
-    guiButtons.addButton(BUTTON_SOUND, 1514); // Button 2: Sound
-    guiButtons.addButton(BUTTON_PLAY, 2313);  // Button 3: Play
-    guiButtons.addButton(BUTTON_LIGHT, 3177); // Button 4: Light
-    guiButtons.addButton(BUTTON_STOP, 0);     // Button 5: Stop (emergency stop)
+    guiButtons.addButton(BUTTON_RECORD, 790);         // Button 1: Record
+    guiButtons.addButton(BUTTON_SOUND, 1514);         // Button 2: Sound
+    guiButtons.addButton(BUTTON_PLAY, 2313);          // Button 3: Play
+    guiButtons.addButton(BUTTON_LIGHT, 3177);         // Button 4: Light
+    guiButtons.addButton(BUTTON_STOP, 0);             // Button 5: Stop (emergency stop)
     guiButtons.registerButtonCallback(handleButtons); // Register button callback
-
 
     // initialize rotary encoder and register callback
     rotaryEncoder.setEncoderType(EncoderType::FLOATING);
     rotaryEncoder.setBoundaries(-100, 100, false);
-    rotaryEncoder.setStepValue(10);
+    rotaryEncoder.setStepValue(5);
     rotaryEncoder.setEncoderValue(0);
     rotaryEncoder.onTurned(&handleEncoder);
     // This is where the inputs are configured and the interrupts get attached
     rotaryEncoder.begin();
-
-   
-
-
 
     // Initialize DuploHub instance
     duploHub.init();
@@ -601,9 +590,9 @@ void loop()
         {
             replayNextCommand();
         }
-        
+
         // handlePoti();
-        //duploHub.processResponseQueue();
+        // duploHub.processResponseQueue();
     }
 
     // Check Duplo Hub State
