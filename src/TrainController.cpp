@@ -450,11 +450,19 @@ void replayNextCommand()
     const HubCommand *cmd = duploHub.getNextReplayCommand();
     if (cmd == nullptr)
     {
-        DEBUG_LOG("TrainController: Not the time to replay command");
-        return; // Exit if not in replay mode
+        // If replay is no longer active, stop playback and update LED
+        if (!duploHub.isReplayActive()) {
+            playback = false;
+            statusLed.setBlinking(false); // Stop blinking first
+            statusLed.setOff();           // Then turn LED off
+            DEBUG_LOG("TrainController: No more commands to replay, stopping replay");
+        } else {
+            DEBUG_LOG("TrainController: Not the time to replay command");
+        }
+        return;
     }
     DEBUG_LOG("TrainController: Replaying command type %d", cmd->type);
-    if (cmd != nullptr && !emergencyStop)
+    if (!emergencyStop)
     {
         // Execute the command based on its type
         switch (cmd->type)
@@ -495,14 +503,6 @@ void replayNextCommand()
         }
         DEBUG_LOG("TrainController: Replayed command type %d", cmd->type);
     }
-    // else
-    // {
-    //     playback = false; // Reset playback state
-    //     duploHub.stopReplay();
-    //     statusLed.setBlinking(false); // Stop blinking first
-    //     statusLed.setOff();           // Then turn LED off
-    //     DEBUG_LOG("TrainController: No more commands to replay, stopping replay");
-    // }
 }
 
 /**
