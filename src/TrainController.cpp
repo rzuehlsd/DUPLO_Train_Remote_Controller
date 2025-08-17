@@ -182,8 +182,6 @@ void handleButtons(int btn_no, bool pressed)
         break;
     case BUTTON_LIGHT:
         color = (color + 1) % 11; // Cycle through DuploColor enum values
-        statusLed.setColor(rgbColors[color]);
-        statusLed.setBlinking(false);
         duploHub.setLedColor((DuploEnums::DuploColor)color);
         DEBUG_LOG("TrainController: Light button pressed, color %d", color);
         delay(DELAY_TIME);
@@ -545,7 +543,9 @@ void setup()
     DEBUG_LOG("TrainController (2 Core) : Starting up...");
     DEBUG_LOG("");
 
+#ifdef DEBUG
     printMemoryInfo();
+#endif
 
     // Initialize onboard RGB LED
     statusLed.begin();                     // Initialize FastLED
