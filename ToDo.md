@@ -5,7 +5,7 @@
 - [x] Während Replay müssen alle Kommandos außer Beenden des Replaymodus und Stop ignoriert werden
 - [x] Ebenso sollten die  über den Color Sensor identifizierten Aktionen im Replay Modus NICHT ausgeführt werden
 - [x] Im Record Modus jedoch sollen die über den Color Sensor identifizierten Befehle mit aufgezeichnet werden
-- [ ] Das Timing der aufgezeichneten Befehle muss überprüft werden und sollte bis auf 500ms mit der Aufgezeichneten Sequenz beim Abspielen übereinstimmen
+- [x] Das Timing der aufgezeichneten Befehle muss überprüft werden und sollte bis auf 500ms mit der Aufgezeichneten Sequenz beim Abspielen übereinstimmen
 
 ### 2. Sonstige Softwareänderungen
 - [ ] Der Voltage Sensor muss aktiviert werden um die Spannung der Duplobatterie zu überwachen. Klären bei welchem Soannungslevel eine Warnung ausgegeben werden soll (hat 4 AAA Batterien)
