@@ -3,8 +3,8 @@
 ### 1. Record /Replay Funktion:
 - [x] Die Replay Liste wird nicht nur genau einmal abgefahren sondern in einer Schleife -> Sollverhalten: Liste einmal abfahren und dann den Replay Modus beenden
 - [x] Während Replay müssen alle Kommandos außer Beenden des Replaymodus und Stop ignoriert werden
-- [ ] Ebenso sollten die  über den Color Sensor identifizierten Aktionen im Replay Modus NICHT ausgeführt werden
-- [ ] Im Record Modus jedoch sollen die über den Color Sensor identifizierten Befehle mit aufgezeichnet werden
+- [x] Ebenso sollten die  über den Color Sensor identifizierten Aktionen im Replay Modus NICHT ausgeführt werden
+- [x] Im Record Modus jedoch sollen die über den Color Sensor identifizierten Befehle mit aufgezeichnet werden
 - [ ] Das Timing der aufgezeichneten Befehle muss überprüft werden und sollte bis auf 500ms mit der Aufgezeichneten Sequenz beim Abspielen übereinstimmen
 
 ### 2. Sonstige Softwareänderungen

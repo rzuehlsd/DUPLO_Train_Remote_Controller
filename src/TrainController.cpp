@@ -323,6 +323,10 @@ void handleEncoder(long speed)
  */
 static void detectedColorCb(DuploEnums::DuploColor color)
 {
+    if (replay) {
+        DEBUG_LOG("TrainController: Color sensor callback ignored during replay");
+        return;
+    }
     DEBUG_LOG("TrainController:  Detected Color: %d", color);
     detectedColor = color; // Store the detected color
     switch (color)
