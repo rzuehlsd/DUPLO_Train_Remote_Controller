@@ -61,7 +61,7 @@ ONLY ON ESP§"S§
 #include "DuploHub.h"
 #include "SystemMemory.h"
 
-#define DEBUG 1 // Enable debug logging
+#undef DEBUG 1 // Enable debug logging
 #include "debug.h"
 #include "ADCButton.h"
 // on board RGB LED
@@ -91,6 +91,9 @@ RotaryEncoder rotaryEncoder = RotaryEncoder(ENCODER_A, ENCODER_B); // -1 means n
 
 // Onboard RGB LED
 #define DATA_PIN 48
+
+// define low voltage threshold for voltage sensor
+#define LOW_VOLTAGE_THRESHOLD 6.0f // Voltage threshold for low battery warning
 
 StatusLED statusLed(DATA_PIN); // Pin 48 for ESP32-S3-DevKitC-1
 
@@ -382,19 +385,20 @@ static void detectedColorCb(DuploEnums::DuploColor color)
  * @brief Callback for detected voltage events from the voltage sensor.
  * @param voltage The detected voltage value.
  */
+// Only execute callback if time since last execution > CALC_VOLTAGE_DELAY
+#ifndef CALC_VOLTAGE_DELAY
+#define CALC_VOLTAGE_DELAY 5000 // ms, default if not defined elsewhere
+#endif
 static void detectedVoltageCb(float voltage)
 {
-    static float meanVoltage[10] = {0.0f};
-    static int i = 0;
-    DEBUG_LOG("TrainController:  Detected Voltage: %.2f V", voltage);
-    i = (i + 1) % 10; // Circular buffer
-    float sum = 0.0f;
-    for (int j = 0; j < 10; j++)
-    {
-        sum += meanVoltage[j];
+    static unsigned long lastExec = 0;
+    unsigned long now = millis();
+    if (now - lastExec < CALC_VOLTAGE_DELAY) {
+        return;
     }
-    if (i == 10)
-        detectedVoltage = sum / 10.0f; // Calculate mean voltage
+    lastExec = now;
+    DEBUG_LOG("TrainController:  Detected Voltage: %.2f V", voltage);
+    detectedVoltage = voltage;
 }
 
 // Function to process the responseQueue and print detected color
@@ -416,7 +420,7 @@ static void detectedSpeedCb(int speed)
  */
 static void onHubConnected()
 {
-    DEBUG_LOG("TrainController: Hub instance activated, starting demo sequence...");
+    DEBUG_LOG("TrainController: Hub instance connected, starting initialization...");
     statusLed.setColor(CRGB::Blue);           // Set color to blue
     statusLed.setBlinking(true, 200, 300, 3); // Blink blue 3x
     delay(1800);                              // Wait for 3 blinks (3 * (200+300) ms)
@@ -435,7 +439,7 @@ static void onHubConnected()
     delay(500);
     // duploHub.activateSpeedSensor();
     delay(200);
-    // duploHub.activateVoltageSensor();
+    duploHub.activateVoltageSensor();
     delay(200);
     DEBUG_LOG("DuploHub: All ports activated");
 
@@ -443,7 +447,7 @@ static void onHubConnected()
     delay(200);
     // duploHub.setDetectedSpeedCallback(detectedSpeedCb);
     delay(200);
-    // duploHub.setDetectedVoltageCallback(detectedVoltageCb);
+    duploHub.setDetectedVoltageCallback(detectedVoltageCb);
     delay(200);
     DEBUG_LOG("DuploHub: All callbacks registered");
 
@@ -595,6 +599,14 @@ void checkStatus(DuploHub &duploHub)
                   duploHub.isConnected() ? "Yes" : "No");
         float cpuTemp = getCPUTemperature();
         DEBUG_LOG("CPU Temperature: %.2f °C", cpuTemp);
+
+        if(detectedVoltage < LOW_VOLTAGE_THRESHOLD)
+        {
+            DEBUG_LOG("TrainController: Low voltage detected: %.2f V", detectedVoltage);
+            statusLed.setColor(CRGB::Red); // Set LED to red for low voltage
+            statusLed.setBlinking(true, 200, 200, 10); // Blink red
+        }
+    
         lastStatusUpdate = millis();
     }
 }
@@ -616,12 +628,11 @@ void loop()
             replayNextCommand();
         }
 
-        // handlePoti();
-        // duploHub.processResponseQueue();
+         duploHub.processResponseQueue();
     }
 
     // Check Duplo Hub State
-    // checkStatus(duploHub);
+    checkStatus(duploHub);
 
-    delay(10); // Add a small delay to reduce CPU load and prevent guru meditation error
+    delay(20); // Add a small delay to reduce CPU load and prevent guru meditation error
 } // End of loop

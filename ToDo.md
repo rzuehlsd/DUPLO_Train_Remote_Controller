@@ -8,16 +8,16 @@
 - [x] Das Timing der aufgezeichneten Befehle muss überprüft werden und sollte bis auf 500ms mit der Aufgezeichneten Sequenz beim Abspielen übereinstimmen
 
 ### 2. Sonstige Softwareänderungen
-- [ ] Der Voltage Sensor muss aktiviert werden um die Spannung der Duplobatterie zu überwachen. Klären bei welchem Soannungslevel eine Warnung ausgegeben werden soll (hat 4 AAA Batterien)
-- [ ] Die RGB LED auf dem Controller soll nur für Statusrückmeldungen verwendet werden:
+- [x] Der Voltage Sensor muss aktiviert werden um die Spannung der Duplobatterie zu überwachen. Klären bei welchem Soannungslevel eine Warnung ausgegeben werden soll (hat 4 AAA Batterien) -> Level wurde auf 6,0V gesetzt testweise
+- [x] Die RGB LED auf dem Controller soll nur für Statusrückmeldungen verwendet werden:
   - [x] Initialisierung angeschlossen, Controller bereit -> von gelb leuchten, dann grün permanent
   - [x] Duplo Hub connected -> blau 3 x blinken dann aus
   - [x] Button Stop gedrückt -> rot dauer blinken, wird aufgehoben bei erneutem Drücken auf Stop
   - [x] Button Record gedrückt: -> blau dauer blinken, aufgehoben bei erneutem Drücken auf Record
   - [x] Button Play gedrückt: -> gelbes dauer blinken bis Sequenz abgeschlossen oder Record erneut gedrückt wurde
   - [x] Bei Disconnect des Duplo Hubs 3 x weiß blinken
-  - [ ] Duplo Batterie Level low: hektisches Dauerblinken in blau
-  - [ ] Controller Betterie Level Low: hecktisches Dauerblinken in rot
+  - [x] Duplo Batterie Level low: 10x hektisches Blinken in rot alle 30 Sekunden
+
 - [ ] Controller Sleep Modus einbauen
   - [ ] wenn keine GUI Aktion für mehr als 5 Minuten soll der Controller in den Sleep Modus gehen
     - [ ] Im Sleep Modus wird nur die Stop Taste überwacht, z.B. über Interrupt
@@ -36,8 +36,9 @@
 
 ### 4. Hardware Modifikationen
 - [ ] Modifikation der Platine:
+- [ ] Controller Batterie Level Low: hecktisches Dauerblinken in rot - erfordert Modifikation der Platine und Überwachung der Spannung durch MCU -> aktuell nicht realisierbar
   - [ ] Stop Button wird direkt über einen Digital Pin eingelesen
-  - [ ] Neben den Analog Buttons LED, Sound, Play und Replay noch einen Biutton für das PAiring und Wasseraufnehmen einbauen
+  - [ ] Neben den Analog Buttons LED, Sound, Play und Replay noch einen Biutton für das Pairing und Wasseraufnehmen einbauen
     - [ ] Bei Pairing wird die ID des aktuell verbundenen Zuges gespeichert und primär beim nächsten Connect verwendet. Wird kein Hub mit der gespeicherten ID nach 60 Sekunden gefunden wird jeder aktive Hub verbunden
     - [ ] Pairing kann aufgehoben werden durch erneutes drücken des Knopfes
     - [ ] Bei Drücken von Wasseraufnehmen wird die gleiche Aktionssequenz wie bei dem blauen Duploplättchen durchgeführt

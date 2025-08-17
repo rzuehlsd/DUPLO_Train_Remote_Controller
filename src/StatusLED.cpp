@@ -105,6 +105,7 @@ void StatusLED::update()
     {
         // Finite blinking is complete, stop blinking and turn LED off
         _blinking = false;
+        _color = CRGB::Black; // Also reset color to black
         _leds[0] = CRGB::Black; // Turn LED off after finite blinks
         FastLED.show();
         return;
