@@ -192,7 +192,7 @@ void handleButtons(int btn_no, bool pressed)
         if (recording)
         {
             DEBUG_LOG("TrainController: Recording started");
-            statusLed.setColor(rgbColors[10]);
+            statusLed.setColor(CRGB::Blue);           // Blink blue when recording
             statusLed.setBlinking(true, 250, 250);
             duploHub.recordCommands(true); // Start recording commands
             delay(DELAY_TIME);             // Allow time for sound to play
@@ -201,7 +201,7 @@ void handleButtons(int btn_no, bool pressed)
         {
             DEBUG_LOG("TrainController: Recording stopped");
             duploHub.recordCommands(false); // Stop recording commands
-            statusLed.setOff();
+            statusLed.setOff();             // LED off when recording stops
             delay(DELAY_TIME); // Allow time for sound to play
         }
         break;
@@ -217,7 +217,7 @@ void handleButtons(int btn_no, bool pressed)
         if (playback)
         {
             duploHub.replayCommands();
-            statusLed.setColor(rgbColors[3]);
+            statusLed.setColor(CRGB::Yellow);           // Blink yellow during replay
             statusLed.setBlinking(true, 250, 250);
             replay = true; // Set replay mode
         }
@@ -243,8 +243,8 @@ void handleButtons(int btn_no, bool pressed)
         }
         if (emergencyStop)
         {
-            statusLed.setColor(rgbColors[9]);
-            statusLed.setBlinking(true, 1000, 250);
+            statusLed.setColor(CRGB::Red); // Solid red when stop is active
+            statusLed.setBlinking(false);
             duploHub.playSound((DuploEnums::DuploSound::BRAKE)); // Play brake sound
             delay(DELAY_TIME);                                   // Allow time for sound to play
             duploHub.setLedColor(DuploEnums::DuploColor::RED);
@@ -256,7 +256,7 @@ void handleButtons(int btn_no, bool pressed)
             duploHub.playSound((DuploEnums::DuploSound::STATION_DEPARTURE)); // Play departure sound
             delay(DELAY_TIME);                                               // Allow time for sound to play
             duploHub.setLedColor(DuploEnums::DuploColor::GREEN);             // Set LED to green
-            statusLed.setOff();
+            statusLed.setOff(); // LED off when stop is released
             delay(DELAY_TIME); // Allow time for sound to play
         }
         DEBUG_LOG("TrainController: Emergency stop %s", emergencyStop ? "activated" : "deactivated");
@@ -417,8 +417,10 @@ static void detectedSpeedCb(int speed)
 static void onHubConnected()
 {
     DEBUG_LOG("TrainController: Hub instance activated, starting demo sequence...");
-    statusLed.setColor(CRGB::Blue);           // Set color to red
-    statusLed.setBlinking(true, 200, 300, 3); // Blink: 200ms on, 300ms off
+    statusLed.setColor(CRGB::Blue);           // Set color to blue
+    statusLed.setBlinking(true, 200, 300, 3); // Blink blue 3x
+    delay(1800);                              // Wait for 3 blinks (3 * (200+300) ms)
+    statusLed.setOff();                       // Turn LED off after blinking
 
 #ifdef DEBUG
     duploHub.listDevicePorts(); // List connected devices on the hub
@@ -460,8 +462,10 @@ static void onHubConnected()
 static void onHubDisconnected()
 {
     DEBUG_LOG("TrainController: Hub disconnected - stopping all operations");
-    statusLed.setColor(CRGB::Orange);         // Set color to red
-    statusLed.setBlinking(true, 200, 300, 3); // Blink: 200ms on, 300ms off
+    statusLed.setColor(CRGB::White);          // Set color to white
+    statusLed.setBlinking(true, 200, 300, 3); // Blink white 3x
+    delay(1800);                              // Wait for 3 blinks (3 * (200+300) ms)
+    statusLed.setOff();                       // Turn LED off after blinking
 }
 
 void replayNextCommand()
@@ -474,7 +478,7 @@ void replayNextCommand()
             playback = false;
             replay = false;
             statusLed.setBlinking(false); // Stop blinking first
-            statusLed.setOff();           // Then turn LED off
+            statusLed.setOff();           // LED off when replay ends
             DEBUG_LOG("TrainController: No more commands to replay, stopping replay");
         } else {
             DEBUG_LOG("TrainController: Not the time to replay command");
@@ -542,7 +546,7 @@ void setup()
     // Initialize onboard RGB LED
     statusLed.begin();                     // Initialize FastLED
     statusLed.setBrightness(100);          // Set brightness
-    statusLed.setColor(CRGB::Red);         // Set color to red
+    statusLed.setColor(CRGB::Yellow);         // Set color to red
     statusLed.setBlinking(true, 200, 300); // Blink: 200ms on, 300ms off
 
     // setup push buttons and register callback
@@ -573,7 +577,8 @@ void setup()
     delay(200); // Allow time for BLE task to initialize
 
     DEBUG_LOG("TrainController: Ready - BLE task running, waiting for hub connection...");
-    statusLed.setOff();
+    statusLed.setColor(CRGB::Green);       // Set color to green after initialization
+    statusLed.setBlinking(false);          // Solid green
 }
 
 /**

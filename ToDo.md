@@ -10,12 +10,12 @@
 ### 2. Sonstige Softwareänderungen
 - [ ] Der Voltage Sensor muss aktiviert werden um die Spannung der Duplobatterie zu überwachen. Klären bei welchem Soannungslevel eine Warnung ausgegeben werden soll (hat 4 AAA Batterien)
 - [ ] Die RGB LED auf dem Controller soll nur für Statusrückmeldungen verwendet werden:
-  - [ ] Initialisierung angeschlossen, Controller bereit -> von gelb blinken, dann grün permanent
-  - [ ] Duplo Hub connected -> blau 3 x blinken dann aus
-  - [ ] Button Stop gedrückt -> rot dauer blinken, wird aufgehoben bei erneutem Drücken auf Stop
-  - [ ] Button Record gedrückt: -> blau dauer blinken, aufgehoben bei erneutem Drücken auf Record
-  - [ ] Button Play gedrückt: -> gelbes dauer blinken bis Sequenz abgeschlossen oder Record erneut gedrückt wurde
-  - [ ] Bei Disconnect des Duplo Hubs 3 x weiß blinken
+  - [x] Initialisierung angeschlossen, Controller bereit -> von gelb leuchten, dann grün permanent
+  - [x] Duplo Hub connected -> blau 3 x blinken dann aus
+  - [x] Button Stop gedrückt -> rot dauer blinken, wird aufgehoben bei erneutem Drücken auf Stop
+  - [x] Button Record gedrückt: -> blau dauer blinken, aufgehoben bei erneutem Drücken auf Record
+  - [x] Button Play gedrückt: -> gelbes dauer blinken bis Sequenz abgeschlossen oder Record erneut gedrückt wurde
+  - [x] Bei Disconnect des Duplo Hubs 3 x weiß blinken
   - [ ] Duplo Batterie Level low: hektisches Dauerblinken in blau
   - [ ] Controller Betterie Level Low: hecktisches Dauerblinken in rot
 - [ ] Controller Sleep Modus einbauen
