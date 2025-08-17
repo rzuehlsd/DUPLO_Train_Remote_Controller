@@ -97,6 +97,7 @@ StatusLED statusLed(DATA_PIN); // Pin 48 for ESP32-S3-DevKitC-1
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
 
+
 // Determine which button is pressed based on ADC value
 static bool soundPressed = false;
 static bool lightPressed = false;
@@ -112,6 +113,7 @@ static bool emergencyStop = false;
 
 static bool recording = false;
 static bool playback = false;
+static bool replay = false; // true when a sequence is being replayed
 
 ADCButtons guiButtons = ADCButtons(ADC_PIN);
 
@@ -161,8 +163,12 @@ void handleButtons(int btn_no, bool pressed)
     if (pressed == false || !duploHub.isConnected())
         return;
 
-    // DEBUG_LOG("TrainController: Button %d %s", btn_no, pressed ? "pressed" : "released");
-    // Update button states based on button number
+    // If replay is active, only STOP and PLAY (replay) buttons are allowed
+    if (replay && btn_no != BUTTON_STOP && btn_no != BUTTON_PLAY) {
+        DEBUG_LOG("TrainController: Ignoring button %d during replay", btn_no);
+        return;
+    }
+
     switch (btn_no)
     {
     case BUTTON_SOUND:
@@ -201,7 +207,7 @@ void handleButtons(int btn_no, bool pressed)
         break;
     case BUTTON_PLAY:
         DEBUG_LOG("TrainController: start or stop playback");
-        // disable plaback when recording is active
+        // disable playback when recording is active
         if (recording)
         {
             DEBUG_LOG("TrainController: Playback disabled while recording is active");
@@ -213,18 +219,28 @@ void handleButtons(int btn_no, bool pressed)
             duploHub.replayCommands();
             statusLed.setColor(rgbColors[3]);
             statusLed.setBlinking(true, 250, 250);
+            replay = true; // Set replay mode
         }
         else
         {
             duploHub.stopReplay();
             statusLed.setOff();
+            replay = false; // End replay mode
         }
         DEBUG_LOG("TrainController: Playback %s", playback ? "started" : "stopped");
         delay(DELAY_TIME);
         break;
     case BUTTON_STOP:
         emergencyStop = !emergencyStop; // Toggle emergency stop state
-
+        // If replay is active, stop replay and playback immediately
+        if (replay) {
+            duploHub.stopReplay();
+            statusLed.setOff();
+            playback = false;
+            replay = false;
+            DEBUG_LOG("TrainController: STOP pressed during replay, replay stopped");
+            return;
+        }
         if (emergencyStop)
         {
             statusLed.setColor(rgbColors[9]);
@@ -243,7 +259,6 @@ void handleButtons(int btn_no, bool pressed)
             statusLed.setOff();
             delay(DELAY_TIME); // Allow time for sound to play
         }
-
         DEBUG_LOG("TrainController: Emergency stop %s", emergencyStop ? "activated" : "deactivated");
         delay(DELAY_TIME);
         break;
@@ -453,6 +468,7 @@ void replayNextCommand()
         // If replay is no longer active, stop playback and update LED
         if (!duploHub.isReplayActive()) {
             playback = false;
+            replay = false;
             statusLed.setBlinking(false); // Stop blinking first
             statusLed.setOff();           // Then turn LED off
             DEBUG_LOG("TrainController: No more commands to replay, stopping replay");
