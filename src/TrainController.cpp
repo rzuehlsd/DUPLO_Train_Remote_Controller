@@ -250,6 +250,8 @@ void handleButtons(int btn_no, bool pressed)
             delay(DELAY_TIME);                                   // Allow time for sound to play
             duploHub.setLedColor(DuploEnums::DuploColor::RED);
             delay(DELAY_TIME);
+            duploHub.stopMotor();
+            delay(DELAY_TIME); // Stop the motor immediately
             rotaryEncoder.setEncoderValue(0);
         }
         else
