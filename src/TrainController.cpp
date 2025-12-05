@@ -61,7 +61,7 @@ ONLY ON ESP§"S§
 #include "DuploHub.h"
 #include "SystemMemory.h"
 
-#undef DEBUG 1 // Enable debug logging
+#define DEBUG 1 // Enable debug logging
 #include "debug.h"
 #include "ADCButton.h"
 // on board RGB LED
@@ -83,11 +83,12 @@ ONLY ON ESP§"S§
 #define ADC_PIN 7 // Button ADC pin (GPIO 7)
 
 // Speed is defined via rotary encoder
-#define ENCODER_A 4 // Encoder A pin
-#define ENCODER_B 5 // Encoder B pin
+#define ENCODER_A 12 // Encoder A pin
+#define ENCODER_B 13 // Encoder B pin
+#define ENCODER_BTN 11 // Encoder button pin
 
 // Create rotary encoder instance
-RotaryEncoder rotaryEncoder = RotaryEncoder(ENCODER_A, ENCODER_B); // -1 means no button pin
+RotaryEncoder rotaryEncoder = RotaryEncoder(ENCODER_A, ENCODER_B, ENCODER_BTN);
 
 // Onboard RGB LED
 #define DATA_PIN 48
@@ -124,10 +125,11 @@ ADCButtons guiButtons = ADCButtons(ADC_PIN);
 enum GUIButtons
 {
     BUTTON_RECORD,
-    BUTTON_SOUND,
     BUTTON_PLAY,
+    BUTTON_STOP,
+    BUTTON_WATER,
     BUTTON_LIGHT,
-    BUTTON_STOP
+    BUTTON_SOUND
 };
 
 // mapping between Duplo Colors and CRGB Colors
@@ -154,6 +156,8 @@ CRGB::HTMLColorCode rgbColors[] = {
 void handleButtons(int btn_no, bool pressed)
 {
 
+    DEBUG_LOG("TrainController: Button %d is %s", btn_no, pressed ? "pressed" : "released");
+
     static int color = 0; // Color index for LED cycling
     static int duploSounds[] = {
         DuploEnums::DuploSound::HORN,
@@ -175,7 +179,9 @@ void handleButtons(int btn_no, bool pressed)
     switch (btn_no)
     {
     case BUTTON_SOUND:
-        sound = (sound + 1) % 5;
+        sound++;
+        if (sound == 2) sound = 3; // skip WATER_REFILL sound
+        if (sound == 5) sound = 0;
         duploHub.playSound((DuploEnums::DuploSound)duploSounds[sound]);
         DEBUG_LOG("TrainController: Sound button pressed, playing sound %d", sound);
         delay(DELAY_TIME);
@@ -183,6 +189,12 @@ void handleButtons(int btn_no, bool pressed)
     case BUTTON_LIGHT:
         color = (color + 1) % 11; // Cycle through DuploColor enum values
         duploHub.setLedColor((DuploEnums::DuploColor)color);
+        DEBUG_LOG("TrainController: Light button pressed, color %d", color);
+        delay(DELAY_TIME);
+        break;
+    case BUTTON_WATER:
+        color = (color + 1) % 11; // Cycle through DuploColor enum values
+        duploHub.playSound((DuploEnums::DuploSound)duploSounds[2]); // Play WATER_REFILL sound
         DEBUG_LOG("TrainController: Light button pressed, color %d", color);
         delay(DELAY_TIME);
         break;
@@ -272,7 +284,9 @@ void handleButtons(int btn_no, bool pressed)
 }
 
 // Sets the speed of the currently selected train
-#define MIN_SPEED 20
+#define MIN_SPEED 10
+#define MAX_SPEED 100
+#define SPEED_INC 5
 #define POTI_DELAY 250
 
 static int lastSpeed = 0; // holds current mapping of poti setting to speed
@@ -282,7 +296,7 @@ static int lastSpeed = 0; // holds current mapping of poti setting to speed
  *
  * Stops the train if emergency stop is active or if the potentiometer is in the zero zone.
  */
-void handleEncoder(long speed)
+static void handleEncoder(long speed)
 {
     static long lastCall = millis();
 
@@ -319,6 +333,15 @@ void handleEncoder(long speed)
 }
 
 
+static void handleEncoderBtn(unsigned long)
+{
+    if(!duploHub.isConnected())
+        return;
+
+    DEBUG_LOG("TrainController: Encoder button pressed");
+}
+
+
 // Function to process the responseQueue and print detected color
 /**
  * @brief Callback for detected color events from the color sensor.
@@ -326,6 +349,9 @@ void handleEncoder(long speed)
  */
 static void detectedColorCb(DuploEnums::DuploColor color)
 {
+    return; 
+
+
     if (replay) {
         DEBUG_LOG("TrainController: Color sensor callback ignored during replay");
         return;
@@ -418,6 +444,8 @@ static void detectedSpeedCb(int speed)
  *
  * Activates all relevant ports and registers sensor callbacks.
  */
+String duploHubAddress = "";
+
 static void onHubConnected()
 {
     DEBUG_LOG("TrainController: Hub instance connected, starting initialization...");
@@ -432,12 +460,12 @@ static void onHubConnected()
 #endif
 
     duploHub.activateRgbLight();
-    delay(500);
+    delay(200);
     duploHub.activateBaseSpeaker();
-    delay(500);
+    delay(200);
     duploHub.activateColorSensor();
-    delay(500);
-    // duploHub.activateSpeedSensor();
+    delay(200);
+    duploHub.activateSpeedSensor();
     delay(200);
     duploHub.activateVoltageSensor();
     delay(200);
@@ -445,7 +473,7 @@ static void onHubConnected()
 
     duploHub.setDetectedColorCallback(detectedColorCb);
     delay(200);
-    // duploHub.setDetectedSpeedCallback(detectedSpeedCb);
+    duploHub.setDetectedSpeedCallback(detectedSpeedCb);
     delay(200);
     duploHub.setDetectedVoltageCallback(detectedVoltageCb);
     delay(200);
@@ -454,9 +482,10 @@ static void onHubConnected()
     duploHub.setHubName("DuploTrain_1");
     delay(200);
     
+    duploHubAddress = String(duploHub.getHubAddress().c_str());
 
     DEBUG_LOG("TrainController: Connected to hub: %s", duploHub.getHubName().c_str());
-    DEBUG_LOG("TrainController: Hub address: %s", duploHub.getHubAddress().c_str());
+    DEBUG_LOG("TrainController: Hub address: %s", duploHubAddress.c_str());
 }
 
 // Callback function when hub disconnects
@@ -550,30 +579,33 @@ void setup()
 #endif
 
     // Initialize onboard RGB LED
-    statusLed.begin();                     // Initialize FastLED
+    statusLed.begin();                     // Initialize FastLED,,,,z
     statusLed.setBrightness(100);          // Set brightness
     statusLed.setColor(CRGB::Yellow);         // Set color to red
     statusLed.setBlinking(true, 200, 300); // Blink: 200ms on, 300ms off
 
     // setup push buttons and register callback
-    guiButtons.addButton(BUTTON_RECORD, 790);         // Button 1: Record
-    guiButtons.addButton(BUTTON_SOUND, 1514);         // Button 2: Sound
-    guiButtons.addButton(BUTTON_PLAY, 2313);          // Button 3: Play
-    guiButtons.addButton(BUTTON_LIGHT, 3177);         // Button 4: Light
-    guiButtons.addButton(BUTTON_STOP, 0);             // Button 5: Stop (emergency stop)
+    guiButtons.addButton(BUTTON_RECORD, 600);         // Button 1: Record sequence
+    guiButtons.addButton(BUTTON_PLAY, 1220);          // Button 2: Play recorded sequence
+    guiButtons.addButton(BUTTON_STOP, 1815);          // Button 3: Emergency Stop
+    guiButtons.addButton(BUTTON_WATER, 2375);         // Button 4: Make sound fill up water
+    guiButtons.addButton(BUTTON_LIGHT, 2965);         // Button 5: Change lights
+    guiButtons.addButton(BUTTON_SOUND, 3750);         // Button 2: Sound
     guiButtons.registerButtonCallback(handleButtons); // Register button callback
 
     // initialize rotary encoder and register callback
     rotaryEncoder.setEncoderType(EncoderType::FLOATING);
-    rotaryEncoder.setBoundaries(-100, 100, false);
-    rotaryEncoder.setStepValue(5);
+    rotaryEncoder.setBoundaries(-MAX_SPEED, MAX_SPEED, false);
+    rotaryEncoder.setStepValue(SPEED_INC);
     rotaryEncoder.setEncoderValue(0);
     rotaryEncoder.onTurned(&handleEncoder);
+    rotaryEncoder.onPressed(&handleEncoderBtn);
     // This is where the inputs are configured and the interrupts get attached
     rotaryEncoder.begin();
 
     // Initialize DuploHub instance
-    duploHub.init();
+    //std::string hubMAC = "d8:71:4d:ce:ad:b2";
+    duploHub.init(); 
     delay(1000);
 
     // Register connection event callbacks
@@ -620,10 +652,11 @@ void checkStatus(DuploHub &duploHub)
 void loop()
 {
     statusLed.update(); // Handle blinking
-    guiButtons.updateButtons();
-
+ 
     if (duploHub.isConnected())
     {
+        guiButtons.updateButtons();
+
         // Handle replay commands if replay is active
         if (duploHub.isReplayActive())
         {

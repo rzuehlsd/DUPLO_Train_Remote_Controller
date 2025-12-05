@@ -217,6 +217,9 @@ void ADCButtons::updateButtons()
     // Read ADC value from configured pin
     int adcValue = analogRead(adcPin);
 
+    DEBUG_LOG("ADCButtons: Read ADC value %d from pin %d", adcValue, adcPin);
+
+
     // Store value in circular buffer
     values[currentIndex] = adcValue;
     currentIndex = (currentIndex + 1) % samples;
