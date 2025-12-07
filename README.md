@@ -1,6 +1,6 @@
-# DUPLO Train Controller System
+# DUPLO Train Remote Controller System
 
-**A professional, event-driven train control system for LEGO DUPLO, built on ESP32, FreeRTOS, and Bluetooth Low Energy (BLE).**
+**A event-driven train remote control system for LEGO DUPLO, built on ESP32, FreeRTOS, and Bluetooth Low Energy (BLE).**
 
 ---
 
@@ -18,7 +18,7 @@
 ---
 
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Project Overview](#-project-overview)
 - [Architecture Overview](#-architecture-overview)
@@ -43,9 +43,9 @@
 
 ---
 
-## 📖 Project Overview
+## Project Overview
 
-This project implements a robust, multi-layered, event-driven train controller for LEGO DUPLO trains. The firmware builds on top of the open-source [Legoino](https://github.com/JorgePe/legoino) library created by Jorge Pereira ("JorgePe"), reusing its Powered Up protocol support while adding a hardened hardware abstraction tailored to ESP32 dual-core devices.
+This project implements a robust, multi-layered, event-driven train controller for LEGO DUPLO trains. The firmware builds on top of the open-source [Legoino](https://github.com/corneliusmunz/legoino) library created by Cornelius Munz, reusing its Powered Up protocol support while adding a hardened hardware abstraction tailored to ESP32 dual-core devices.
 
 Key pillars of the solution include:
 
@@ -57,34 +57,46 @@ Key pillars of the solution include:
 
 The high-level structure is summarised below; a deeper dive is available in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## 🌟 User Experience Highlights
+---
 
-These are the moments a driver or parent actually notices while using the controller—zero jargon, just playtime impressions.
+## User Interface
 
-- **Switch on & go:** Power the ESP32 and the DUPLO hub, wait a heartbeat, and the status LED glows green to confirm the train is connected and ready.
-- **Throttle feel:** The rotary knob behaves like a miniature train throttle—smooth acceleration when you turn right, gentle braking when you back off, with a centre notch for easy stops.
-- **Instant atmosphere:** Dedicated buttons trigger horn blasts, brake squeals, and refill sounds on cue, turning simple loops into storytelling sessions.
-- **Colour-coded surprises:** Placing red, yellow, blue, or white tiles on the track triggers matching actions (emergency stop, horn, refill pause, celebration flashes) for interactive play without touching the controller.
-- **Showtime replay:** Capture a favourite run once, then play it back later to wow an audience or keep kids entertained with a predictable routine.
-- **Clear safety cues:** Emergency stops bathe the hub LED in red and keep the train still until you deliberately resume, giving guardians peace of mind.
-- **Sleep when you do:** After a quiet spell the controller nods off, conserving power, and wakes instantly with a tap—perfect for exhibitions or classrooms.
-- **Friendly status feedback:** Periodic console messages and LED hints explain what’s happening (“searching,” “replaying,” “sleeping”) so you never guess at the system state.
+### Quick Start: Connecting a DUPLO Train
+- Power on the controller (ESP32) and the DUPLO Train Hub. 
+- The DUPLO train will show a **white** blinking front light.
+- The RGB LED of the controller turns to **yellow**.
+- The controller immediately begins scanning for an active duplo train.
+- Once internal initializatioon of the controller is completed the RBB LED turns to **green**. 
+- If connected the DUPLO train will show a solid **blue** front light.
+- After DUPLO train has connected, the controller’s RGB status LED turns to *blue** and blinks 3 times to confirm link.
+- If no hub is found, the status LED pulses **orange** every few seconds to prompt you to power cycle or move the train closer.
 
-## 🌟 User Experience Highlights
+### Primary Controls
+| Control | Action | Behaviour |
+|---------|--------|-----------|
+| Rotary encoder (turn) | Adjust train speed | Smooth throttle control from stop to full speed forward or backward with a centre detent for effortless neutral. |
+| Rotary encoder (press) | Wake controller / confirm prompts | Single press wakes the unit from deep sleep. |
+| Record button | Capture current driving session | RGB LED blinks slowly **red** while recording and stores timing for later playback. Push button again to stop recording.|
+| Play button | Replay last recorded session | RGB LED  blinks slowly **yellow** during replay; train reproduces motor, light, and sound cues. Press button again to stop replay of recorded session.|
+| Stop button | Immediate emergency stop | Motor power cuts instantly; RGB LED switches to solid **red** and plays break sound. Press button again to resume. RGB LED will go off and departure sound will be played.|
+| Light button | Cycle hub LED colours | Steps through preset colours so kids can theme their train without menus. |
+| Sound button | Trigger sound effects | Plays horn, brake, or station sounds instantly for interactive storytelling. |
+| Water button | Start refill routine | Pauses the train, plays refill sound, and resumes the previous throttle setting. |
 
-These are the moments a driver or parent actually notices while using the controller—zero jargon, just playtime impressions.
+### Optical Feedback (Controller RGB LED)
+- **Blue (pulsing 5 times):** Connection to a DUPLO hub establish and ready for commands.
+- **Red (slow blinking):** Recording action sequence.
+- **Yellow (slow blinking):** Replaying action sequence.
+- **Red (steady):** Emergency stop engaged. Goes off if button is engaged again
+- **Red (fast pulses 5 times):** Signals low voltage of DUPLO train batterie every 30 seconds
 
-- **Switch on & go:** Power the ESP32 and the DUPLO hub, wait a heartbeat, and the status LED glows green to confirm the train is connected and ready.
-- **Throttle feel:** The rotary knob behaves like a miniature train throttle—smooth acceleration when you turn right, gentle braking when you back off, with a centre notch for easy stops.
-- **Instant atmosphere:** Dedicated buttons trigger horn blasts, brake squeals, and refill sounds on cue, turning simple loops into storytelling sessions.
-- **Colour-coded surprises:** Placing red, yellow, blue, or white tiles on the track triggers matching actions (emergency stop, horn, refill pause, celebration flashes) for interactive play without touching the controller.
-- **Showtime replay:** Capture a favourite run once, then play it back later to wow an audience or keep kids entertained with a predictable routine.
-- **Clear safety cues:** Emergency stops bathe the hub LED in red and keep the train still until you deliberately resume, giving guardians peace of mind.
-- **Sleep when you do:** After a quiet spell the controller nods off, conserving power, and wakes instantly with a tap—perfect for exhibitions or classrooms.
-- **Friendly status feedback:** Periodic console messages and LED hints explain what’s happening (“searching,” “replaying,” “sleeping”) so you never guess at the system state.
+### Auto-Sleep & Wake-Up
+- After **5 minutes** without button presses or encoder turns, the controller enters deep sleep to save power; the status LED fades out to indicate standby.
+- To reactivate, press the rotary encoder once to start initialization and connection cycle again
+
 
 ---
-## 🧠 Architecture Overview
+## Architecture Overview
 
 The firmware is organised into three cooperating layers:
 
@@ -94,7 +106,7 @@ The firmware is organised into three cooperating layers:
 
 These layers communicate exclusively through FreeRTOS queues and callbacks, which allows the BLE task and user interface to stay decoupled. The full architectural description, sequence diagrams, and performance considerations are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## ⚙️ Dual-Core Strategy
+## Dual-Core Strategy
 
 The ESP32’s two cores are used deliberately to isolate time-critical communication from user-driven workloads:
 
@@ -115,7 +127,7 @@ This separation keeps latency predictable—even when the UI is busy—and preve
 
 
 ---
-## 🏗️ System Architecture
+## System Architecture
 
 ### Multi-Task Processing with Bidirectional Communication
 
@@ -192,7 +204,7 @@ sequenceDiagram
 
 ---
 
-## ✨ Features
+## Features
 
 - **Multi-Task BLE Management**: BLE operations run on a dedicated core, never blocking the main application.
 - **Automatic Connection & Recovery**: Discovers, connects, and reconnects to DUPLO train hubs automatically.
@@ -209,11 +221,12 @@ sequenceDiagram
 
 ---
 
-## 🔧 Hardware Requirements
+## Hardware Requirements
 
 ### Primary Hardware
 
-- **ESP32 Development Board** (ESP32-DevKitC or compatible)
+- **ESP32 Development Board** (ESP32-S3 Dev kit or compatible)
+    I use the Tenstar ESP32-S3 FH4R2 SuperMini which also includes cuircits to charge a 3.7V Lithium battery.
 - **LEGO DUPLO Train Hub** with motor connected to Port A
 - **USB Cable** for programming and power
 
@@ -233,15 +246,15 @@ sequenceDiagram
 
 ---
 
-## 🛠️ Hardware Roadmap
+## Hardware Roadmap
 
-- A dedicated ESP32-S3 carrier board with battery management and button/encoder headers is being finalised in KiCad. The design files will be added to this repository once the first hardware spin is validated.
+- A dedicated ESP32-S3 carrier board with battery management and button/encoder headers is being finalised in KiCad. The design files have be added to this repository in directory **hardware**.
 - A matching printable enclosure is being modelled in OpenSCAD to fit DUPLO geometry and house the controller, battery, and user controls. The `.scad` source will accompany the board files when released.
 - Until the hardware package lands, the firmware runs on off-the-shelf ESP32 DevKit boards with external wiring as described above.
 
 ---
 
-## 📦 Software Dependencies
+## Software Dependencies
 
 ### Platform
 
@@ -269,7 +282,7 @@ lib_deps =
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### 1. Environment Setup
 
@@ -304,7 +317,7 @@ pio device monitor
 
 ---
 
-## 📖 Usage
+## Usage
 
 ### Basic Operation
 
@@ -339,7 +352,7 @@ The system runs a continuous demonstration:
 
 ---
 
-## 🎛️ User Interaction & LED Feedback
+## User Interaction & LED Feedback
 
 | Interaction | Description | Hub Response | Status LED Feedback |
 |-------------|-------------|--------------|---------------------|
@@ -365,7 +378,7 @@ These interaction rules are processed via `DuploHub::processResponseQueue()` usi
 
 ---
 
-## 📚 API Reference
+## API Reference
 
 ### DuploHub Class
 
@@ -461,7 +474,7 @@ BLACK, PINK, PURPLE, BLUE, LIGHTBLUE, CYAN, GREEN, YELLOW, ORANGE, RED, WHITE
 
 ---
 
-## 📊 System Monitoring
+## System Monitoring
 
 - **BLE Task**: Runs on Core 0, Priority 2
 - **Main Loop**: Runs on Core 1, Priority 1
@@ -487,7 +500,7 @@ TrainController Status - BLE Task: Running, Hub Connected: Yes, Demo Active: Yes
 
 ---
 
-## 🔄 How Sensor Processing Works
+## How Sensor Processing Works
 
 When a DUPLO color sensor detects a color change, here's how it flows through the system:
 
@@ -504,7 +517,7 @@ When a DUPLO color sensor detects a color change, here's how it flows through th
 
 ---
 
-## 🎮 How Motor Control Works
+## How Motor Control Works
 
 When you call `duploHub.setMotorSpeed(50)`, here's how it flows through the system:
 
@@ -521,7 +534,7 @@ When you call `duploHub.setMotorSpeed(50)`, here's how it flows through the syst
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Common Issues & Solutions
 
@@ -552,7 +565,7 @@ monitor_filters = esp32_exception_decoder
 
 ---
 
-## 🛠️ Development
+## Development
 
 ### Project Structure
 
@@ -593,7 +606,7 @@ DuploTrain/
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 ### Development Process
 1. Fork the repository
@@ -614,13 +627,13 @@ DuploTrain/
 
 ---
 
-## 📄 License
+## License
 
 MIT License - see LICENSE file for details
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Cornelius Munz** - Legoino library creator
 - **LEGO Group** - DUPLO and Powered Up hardware
