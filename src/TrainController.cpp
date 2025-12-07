@@ -88,7 +88,7 @@ ONLY ON ESP§"S§
 #define ENCODER_BTN 11 // Encoder button pin
 
 // Create rotary encoder instance
-RotaryEncoder rotaryEncoder = RotaryEncoder(ENCODER_A, ENCODER_B, ENCODER_BTN);
+RotaryEncoder rotaryEncoder = RotaryEncoder(ENCODER_A, ENCODER_B); //, ENCODER_BTN);
 
 // Onboard RGB LED
 #define DATA_PIN 48
@@ -101,6 +101,9 @@ StatusLED statusLed(DATA_PIN); // Pin 48 for ESP32-S3-DevKitC-1
 // TrainController instance with DuploHub for BLE communication
 DuploHub duploHub;
 
+// record user action time of last user action
+unsigned long lastUserActionTime = 0;
+#define maxIdleTime 30000 // 30 seconds until going to sleep
 
 // Determine which button is pressed based on ADC value
 static bool soundPressed = false;
@@ -169,6 +172,8 @@ void handleButtons(int btn_no, bool pressed)
 
     if (pressed == false || !duploHub.isConnected())
         return;
+
+    lastUserActionTime = millis();
 
     // If replay is active, only STOP and PLAY (replay) buttons are allowed
     if (replay && btn_no != BUTTON_STOP && btn_no != BUTTON_PLAY) {
@@ -324,6 +329,7 @@ static void handleEncoder(long speed)
         else
         {
             // train speed changed
+            lastUserActionTime = millis();
             duploHub.setMotorSpeed(speed);
             lastSpeed = speed;
         }
@@ -461,6 +467,9 @@ static void onHubConnected()
     delay(1800);                              // Wait for 3 blinks (3 * (200+300) ms)
     statusLed.setOff();                       // Turn LED off after blinking
 
+    // reset user activity timer to start value
+    lastUserActionTime = millis();
+
 #ifdef DEBUG
     duploHub.listDevicePorts(); // List connected devices on the hub
     delay(1000);
@@ -585,6 +594,14 @@ void setup()
     printMemoryInfo();
 #endif
 
+    // configure wakeup pin for deep sleep
+    // Pin konfigurieren (Pull-down für stabile LOW-Zustand)
+    pinMode(ENCODER_BTN, INPUT_PULLDOWN);
+    
+  
+   
+    // esp_sleep_enable_ext0_wakeup(GPIO_NUM_7, 0); // Wake up on LOW signal on pin 7
+
     // Initialize onboard RGB LED
     statusLed.begin();                     // Initialize FastLED,,,,z
     statusLed.setBrightness(100);          // Set brightness
@@ -606,7 +623,7 @@ void setup()
     rotaryEncoder.setStepValue(SPEED_INC);
     rotaryEncoder.setEncoderValue(0);
     rotaryEncoder.onTurned(&handleEncoder);
-    rotaryEncoder.onPressed(&handleEncoderBtn);
+    // rotaryEncoder.onPressed(&handleEncoderBtn);
     // This is where the inputs are configured and the interrupts get attached
     rotaryEncoder.begin();
 
@@ -656,6 +673,40 @@ void checkStatus(DuploHub &duploHub)
     }
 }
 
+
+void esp_goto_sleep()
+{
+        DEBUG_LOG("TrainController: No user action for %d ms, entering deep sleep...", maxIdleTime);
+        statusLed.setColor(CRGB::Purple); // Set LED to purple before sleep
+        statusLed.setBlinking(true, 100, 100, 10); // Blink purple
+        delay(2000); // Wait for 2 seconds to show the LED status
+
+        // Enter deep sleep
+        esp_deep_sleep_start();
+}
+
+
+
+void esp_wake_up()
+{
+    DEBUG_LOG("TrainController: Woke up from deep sleep, reinitializing...");
+    statusLed.setColor(CRGB::Green); // Set LED to green after wakeup
+    statusLed.setBlinking(false);    // Solid green
+
+    // Reinitialize DuploHub
+    duploHub.init(); 
+    delay(200);
+
+    // Register connection event callbacks again
+    duploHub.setOnConnectedCallback(onHubConnected);
+    delay(200);
+    duploHub.setOnDisconnectedCallback(onHubDisconnected);
+    delay(200); // Allow time for BLE task to initialize
+
+    DEBUG_LOG("TrainController: Reinitialized after wakeup, waiting for hub connection...");    
+}
+
+
 // main loop
 /**
  * @brief Arduino main loop. Handles input, updates train state, and processes hub responses.
@@ -663,6 +714,17 @@ void checkStatus(DuploHub &duploHub)
 void loop()
 {
     statusLed.update(); // Handle blinking
+
+    // Check for idle time to enter deep sleep
+    if(lastUserActionTime != 0 && (millis() - lastUserActionTime) > maxIdleTime)
+    {
+        esp_goto_sleep();
+    }
+    
+
+    // ext0 Wakeup: Pin 33 HIGH → Wakeup
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)ENCODER_BTN, 1);  // 1=HIGH
+
  
     if (duploHub.isConnected())
     {
