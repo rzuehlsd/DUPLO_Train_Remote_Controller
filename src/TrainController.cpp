@@ -18,8 +18,8 @@
  * - Real-time status monitoring, logging, and error handling
  * - Automatic BLE connection management and recovery
  * - Modular callback system for sensor and event handling
- * - Sound and LED demo sequences
- * - Emergency stop and user input via debounced buttons and potentiometer
+ * - Record and replay of command sequences for automated demos
+ * - Emergency stop and user input via debounced buttons and rotary encoder
  *
  * Demo Sequence:
  * - LED color changes (GREEN, RED, etc.)
@@ -61,25 +61,29 @@ ONLY ON ESP§"S§
 #include "DuploHub.h"
 #include "SystemMemory.h"
 
-#define DEBUG 1 // Enable debug logging
+#undef DEBUG // Enable debug logging
 #include "debug.h"
 #include "ADCButton.h"
-// on board RGB LED
 #include "StatusLED.h"
+
+#include "driver/rtc_io.h"
+#include "esp_sleep.h"
 
 #include <ESP32RotaryEncoder.h>
 
 #define DELAY_TIME 100 // delay in ms
 
 // Pin declaration
-// All Buttons are connected via resistor array to ADC pin 7
-// Button setup uses voltage divider with different resistor values for each button
-// ADC thresholds need to be calibrated based on actual resistor values:
-// - Sound button: ~3000-3500 ADC value
-// - Light button: ~2500-3000 ADC value
-// - Water button: ~2000-2500 ADC value
-// - Stop button:  ~1500-2000 ADC value
-// Use calibrateButtons() function to determine actual values for your hardware
+// All buttons are wired through a resistor ladder to ADC pin 7 and decoded by voltage level.
+// Current calibration (12-bit ADC values) for the GUI button helpers:
+// - Record: ~450-750  → starts/stops recording the command stream
+// - Play:   ~1000-1400 → toggles replay mode and command playback
+// - Stop:   ~1650-2000 → toggles the emergency stop or halts replay immediately
+// - Water:  ~2200-2550 → plays the water refill sound effect
+// - Light:  ~2800-3150 → cycles the hub LED through the DUPLO color palette
+// - Sound:  ~3500-3900 → advances to the next horn/brake sound sample
+// Re-run calibrateButtons() if your hardware uses different resistor values.
+
 #define ADC_PIN 7 // Button ADC pin (GPIO 7)
 
 // Speed is defined via rotary encoder
@@ -94,7 +98,7 @@ RotaryEncoder rotaryEncoder = RotaryEncoder(ENCODER_A, ENCODER_B); //, ENCODER_B
 #define DATA_PIN 48
 
 // define low voltage threshold for voltage sensor
-#define LOW_VOLTAGE_THRESHOLD 6.0f // Voltage threshold for low battery warning
+#define LOW_VOLTAGE_THRESHOLD 5.0f // Voltage threshold for low battery warning
 
 StatusLED statusLed(DATA_PIN); // Pin 48 for ESP32-S3-DevKitC-1
 
@@ -103,7 +107,7 @@ DuploHub duploHub;
 
 // record user action time of last user action
 unsigned long lastUserActionTime = 0;
-#define maxIdleTime 30000 // 30 seconds until going to sleep
+#define maxIdleTime 300000 // 300 seconds until going to sleep
 
 // Determine which button is pressed based on ADC value
 static bool soundPressed = false;
@@ -210,8 +214,8 @@ void handleButtons(int btn_no, bool pressed)
         if (recording)
         {
             DEBUG_LOG("TrainController: Recording started");
-            statusLed.setColor(CRGB::Blue);           // Blink blue when recording
-            statusLed.setBlinking(true, 250, 250);
+            statusLed.setColor(CRGB::Red); // Blink red when recording
+            statusLed.setBlinking(true, 500, 1000);
             duploHub.recordCommands(true); // Start recording commands
             delay(DELAY_TIME);             // Allow time for sound to play
         }
@@ -231,12 +235,12 @@ void handleButtons(int btn_no, bool pressed)
             DEBUG_LOG("TrainController: Playback disabled while recording is active");
             return; // Ignore playback if recording is active
         }
-        playback = !playback; // Toggle playback state
+        playback = !playback; // Toggle playback state  
         if (playback)
         {
             duploHub.replayCommands();
             statusLed.setColor(CRGB::Yellow);           // Blink yellow during replay
-            statusLed.setBlinking(true, 250, 250);
+            statusLed.setBlinking(true, 500, 1000);
             replay = true; // Set replay mode
         }
         else
@@ -338,9 +342,18 @@ static void handleEncoder(long speed)
     }
 }
 
-
-static void handleEncoderBtn(unsigned long)
+/**
+ * @brief Handle presses of the encoder push button.
+ *
+ * The callback ignores presses while the hub is disconnected, preventing spurious actions during
+ * reconnection. The timestamp provided by the driver is not needed in this implementation.
+ *
+ * @param pressTime Millisecond timestamp supplied by the encoder library.
+ */
+static void handleEncoderBtn(unsigned long pressTime)
 {
+    (void)pressTime;
+
     if(!duploHub.isConnected())
         return;
 
@@ -355,8 +368,8 @@ static void handleEncoderBtn(unsigned long)
  */
 static void detectedColorCb(DuploEnums::DuploColor color)
 {
-    if (replay) {
-        DEBUG_LOG("TrainController: Color sensor callback ignored during replay");
+    if (replay || recording) {
+        DEBUG_LOG("TrainController: Color sensor callback ignored during recording and replay");
         return;
     }
 
@@ -516,7 +529,12 @@ static void onHubDisconnected()
     delay(1800);                              // Wait for 3 blinks (3 * (200+300) ms)
     statusLed.setOff();                       // Turn LED off after blinking
 }
-
+/**
+ * @brief Execute the next recorded command when its playback timestamp arrives.
+ *
+ * Pulls commands from the hub's replay buffer in chronological order, skipping execution if the
+ * emergency stop is active. When the sequence completes, the LED and replay flags are reset.
+ */
 void replayNextCommand()
 {
     const HubCommand *cmd = duploHub.getNextReplayCommand();
@@ -583,22 +601,26 @@ void replayNextCommand()
  */
 void setup()
 {
+#ifdef DEBUG
     Serial.begin(115200);
-    delay(5000);
+    delay(1000);
 
     //  SerialMUTEX();
     DEBUG_LOG("TrainController (2 Core) : Starting up...");
     DEBUG_LOG("");
 
-#ifdef DEBUG
     printMemoryInfo();
 #endif
 
     // configure wakeup pin for deep sleep
-    // Pin konfigurieren (Pull-down für stabile LOW-Zustand)
-    pinMode(ENCODER_BTN, INPUT_PULLDOWN);
+    pinMode(ENCODER_BTN, INPUT_PULLUP);
+
+    // this step is essential for the wakeup pin to work correctly
+    rtc_gpio_pullup_en((gpio_num_t)ENCODER_BTN);        // Keep button line high while sleeping
+    rtc_gpio_pulldown_dis((gpio_num_t)ENCODER_BTN);
     
-  
+    // ext0 Wakeup: button press pulls line LOW to wake the ESP32
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)ENCODER_BTN, 0);  // 0=LOW
    
     // esp_sleep_enable_ext0_wakeup(GPIO_NUM_7, 0); // Wake up on LOW signal on pin 7
 
@@ -628,11 +650,11 @@ void setup()
     rotaryEncoder.begin();
 
     // Initialize DuploHub instance
-    // duploHub.init();
+    duploHub.init();
 
     // Initialisieren mit MAC funktioniert auch, aber nicht klar ob sinnvoll
-    std::string hubMAC = "d8:71:4d:ce:ad:b2";
-    duploHub.init(hubMAC); 
+    // std::string hubMAC = "d8:71:4d:ce:ad:b2";
+    duploHub.init(); 
     
     delay(200);
 
@@ -662,31 +684,34 @@ void checkStatus(DuploHub &duploHub)
         float cpuTemp = getCPUTemperature();
         DEBUG_LOG("CPU Temperature: %.2f °C", cpuTemp);
 
-        if(detectedVoltage < LOW_VOLTAGE_THRESHOLD)
+        if(detectedVoltage < LOW_VOLTAGE_THRESHOLD && !(recording || playback))
         {
             DEBUG_LOG("TrainController: Low voltage detected: %.2f V", detectedVoltage);
             statusLed.setColor(CRGB::Red); // Set LED to red for low voltage
-            statusLed.setBlinking(true, 200, 200, 10); // Blink red
+            statusLed.setBlinking(true, 100, 100, 5); // Blink red
         }
     
         lastStatusUpdate = millis();
     }
 }
-
-
+/**
+ * @brief Enter deep sleep after the inactivity timer expires.
+ *
+ * Invoked from the main loop when no user interaction has been detected for the configured
+ * duration. Currently jumps straight into deep sleep because the hardware reset circuit already
+ * indicates the transition.
+ */
 void esp_goto_sleep()
 {
         DEBUG_LOG("TrainController: No user action for %d ms, entering deep sleep...", maxIdleTime);
-        statusLed.setColor(CRGB::Purple); // Set LED to purple before sleep
-        statusLed.setBlinking(true, 100, 100, 10); // Blink purple
-        delay(2000); // Wait for 2 seconds to show the LED status
 
         // Enter deep sleep
         esp_deep_sleep_start();
 }
 
-
-
+/**
+ * @brief Reinitialize hub state immediately after waking from deep sleep.
+ */
 void esp_wake_up()
 {
     DEBUG_LOG("TrainController: Woke up from deep sleep, reinitializing...");
@@ -720,10 +745,6 @@ void loop()
     {
         esp_goto_sleep();
     }
-    
-
-    // ext0 Wakeup: Pin 33 HIGH → Wakeup
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)ENCODER_BTN, 1);  // 1=HIGH
 
  
     if (duploHub.isConnected())

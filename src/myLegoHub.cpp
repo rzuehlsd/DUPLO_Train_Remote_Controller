@@ -1,43 +1,25 @@
-#include "myLegoHub.h"
-
-/*
- * myLegoHub.cpp
+/**
+ * @file myLegoHub.cpp
+ * @brief DUPLO-specific extensions for Legoino's `Lpf2Hub` implementation.
  *
- * Description:
- *   Implementation of LEGO Powered Up/Boost/Control+ Hub abstraction for ESP32.
- *   Provides BLE device discovery, connection, and basic device control. Used as a base for DuploHub.
+ * Implements lightweight helpers that encapsulate repetitive byte sequences required to command
+ * the DUPLO Train Hub. These routines are leveraged by `DuploHub` to provide richer features while
+ * keeping low-level device interaction centralized.
  *
- * Author: Ralf Zühlsdorff
- * Copyright (c) 2025 Ralf Zühlsdorff
- * License: MIT License
+ * @author Ralf Zühlsdorff
+ * @date 2025
  *
+ * @copyright
  * MIT License
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
  */
+
 #include "myLegoHub.h"
 
 
 /**
  * @brief Activate the base speaker port device.
  *
- * Activates the speaker port and sets the sound mode for the LEGO hub.
+ * Activates the DUPLO speaker port and configures the device to accept sound commands.
  */
 void myLegoHub::activateBaseSpeaker()
 {
@@ -54,7 +36,7 @@ void myLegoHub::activateBaseSpeaker()
  * @brief Play a sound by sound ID.
  * @param sound The sound ID to play.
  *
- * Sends a command to play the specified sound on the hub speaker.
+ * Sends the byte sequence needed to start playback of the provided sound ID on the hub speaker.
  */
 void myLegoHub::playSound(byte sound)
 {
@@ -67,7 +49,7 @@ void myLegoHub::playSound(byte sound)
 /**
  * @brief Activate the RGB LED port device.
  *
- * Activates the RGB LED port for color control.
+ * Requests the DUPLO hub to expose its RGB LED port for color control commands.
  */
 void myLegoHub::activateRgbLight()
 {
@@ -81,7 +63,7 @@ void myLegoHub::activateRgbLight()
  * @brief Set the LED color.
  * @param color The color to set (enum Color).
  *
- * Sets the RGB LED to the specified color.
+ * Transmits the RGB color payload to the hub so the LED reflects the requested hue.
  */
 void myLegoHub::setLedColor(Color color)
 {
@@ -99,7 +81,7 @@ void myLegoHub::setLedColor(Color color)
  * @param maxRawSpeed Maximum raw speed value for mapping (default 255).
  * @return Normalized speed value (-100..100).
  *
- * Maps the raw speedometer sensor value to a normalized range for application logic.
+ * Normalizes raw sensor readings to a predictable range for application logic.
  */
 int myLegoHub::MapSpeedometer(int rawSpeed, int maxRawSpeed)
 {

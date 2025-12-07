@@ -1,16 +1,15 @@
-/*
- * SystemMemory.cpp
- * 
- * Implements functions to monitor and retrieve memory usage information for ESP32 devices.
- * 
- * This source file provides the implementation of functions declared in SystemMemory.h. These
- * functions include utilities to print memory information and retrieve the amount of free heap,
- * SPIRAM, and flash memory available on the device. These utilities are useful for debugging and
- * monitoring system resource usage. Additionally, it includes functionality to monitor CPU
- * temperature in real-time.
- * 
- * Author: Ralf Zühlsdorff
- * Date: 21. Juli 2025
+/**
+ * @file SytemMemory.cpp
+ * @brief Implementation of ESP32 memory and temperature monitoring helpers.
+ *
+ * Defines the diagnostic utilities declared in `include/SystemMemory.h`, providing formatted
+ * summaries of heap, SPIRAM, flash usage, and CPU temperature for the DUPLO Train firmware.
+ *
+ * @author Ralf Zühlsdorff
+ * @date 2025
+ *
+ * @copyright
+ * MIT License
  */
 
 #include <Arduino.h>

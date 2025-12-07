@@ -1,35 +1,16 @@
-
-/*
- * DuploHub.h
+/**
+ * @file DuploHub.h
+ * @brief High-level controller for the LEGO DUPLO Train Hub running on ESP32.
  *
- * Description:
- *   Thread-safe, event-driven abstraction for LEGO DUPLO Train Hub on ESP32.
- *   Provides BLE management, motor, LED, sound, and sensor operations with FreeRTOS support.
- *   Includes callback/event system, automatic connection management, and queue-based command processing.
+ * Declares the `DuploHub` class, which wraps Legoino primitives in a thread-safe, event-driven
+ * interface tailored for the dual-core ESP32 environment. Responsibilities include BLE lifecycle
+ * management, command queuing, sensor event processing, and record/replay support.
  *
- * Author: Ralf Zühlsdorff
- * Copyright (c) 2025 Ralf Zühlsdorff
- * License: MIT License
+ * @author Ralf Zühlsdorff
+ * @date 2025
  *
+ * @copyright
  * MIT License
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
  */
 
 #ifndef DUPLO_HUB_H
@@ -159,31 +140,107 @@ private:
     DetectedVoltageCallback detectedVoltageCallback;
 
     // Internal task management
+    /**
+     * @brief Create FreeRTOS primitives required for hub operation.
+     */
     void initFreeRTOS();
+
+    /**
+     * @brief Tear down FreeRTOS objects created by the hub.
+     */
     void cleanupFreeRTOS();
+
+    /**
+     * @brief Update cached connection flags under mutex protection.
+     *
+     * @param connected Current connection state reported by Legoino.
+     * @param connecting True while an outbound connection attempt is in progress.
+     */
     void updateConnectionState(bool connected, bool connecting);
+
+    /**
+     * @brief Pull commands from the queue and forward them to the hub.
+     */
     void processCommandQueue();
+
+    /**
+     * @brief Flush pending commands and responses.
+     */
     void clearQueues();
     
     // Command queue wrapper for recording functionality
+    /**
+     * @brief Enqueue a command, optionally recording it for replay.
+     *
+     * @param cmd Command to be sent to the hub task.
+     * @param timeout Maximum time the caller may block waiting for space in the queue.
+     * @return `pdTRUE` on success, or `errQUEUE_FULL` if the queue is saturated.
+     */
     BaseType_t sendCommand(const HubCommand& cmd, TickType_t timeout);
+
+    /**
+     * @brief Lazily create the timer that debounces color sensor readings.
+     *
+     * @return True when the timer exists and is ready to start.
+     */
     static bool ensureColorTimerInitialized();
     
+    /**
+     * @brief FreeRTOS entry point for the BLE management task.
+     */
     static void bleTaskWrapper(void *parameter);
+
+    /**
+     * @brief Worker routine executed by the BLE management task.
+     */
     void bleTaskFunction();
+
+    /**
+     * @brief Spawn the BLE task if it is not currently running.
+     */
     void startBLETask();
+
+    /**
+     * @brief Request the BLE task to stop and wait for cleanup.
+     */
     void stopBLETask();
+
+    /**
+     * @brief Advance connection state machine internal to the BLE task.
+     */
     void updateBLE();
+
+    /**
+     * @brief Ensure the BLE task is alive before queuing work.
+     */
     void ensureBLETaskRunning();
 
 protected:
     // Sensor callback registration for lpf2hub
     typedef void (*ColorSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
+    /**
+     * @brief FreeRTOS-safe entry point for color sensor notifications.
+     */
     static void staticColorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
+    /**
+     * @brief Timer hook that emits a color event once readings stabilize.
+     */
     static void colorStabilityTimerCallback(void *arg);
+
     typedef void (*SpeedSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
+    /**
+     * @brief FreeRTOS-safe entry point for speed sensor notifications.
+     */
     static void staticSpeedSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
     typedef void (*VoltageSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+
+    /**
+     * @brief FreeRTOS-safe entry point for voltage sensor notifications.
+     */
     static void staticVoltageSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
 
 public:

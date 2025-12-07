@@ -13,7 +13,7 @@
  * - Dual-core FreeRTOS architecture for robust, responsive operation
  * - Modular callback system for sensors and events
  *
- * @author Michael
+ * @author Ralf Zühlsdorff
  * @date 2025
  *
  * @copyright
@@ -61,6 +61,15 @@ namespace
     int lastStableColor = -1;
 }
 
+/**
+ * @brief Create the color stability debounce timer on first use.
+ *
+ * The timer delays emission of color sensor events by `COLOR_SETTLE_DELAY_US`, ensuring that only
+ * stable readings reach the main application. The function is safe to call repeatedly; it merely
+ * returns once initialization has succeeded.
+ *
+ * @return True when the timer handle exists and can be armed.
+ */
 bool DuploHub::ensureColorTimerInitialized()
 {
     if (colorStabilityTimer != nullptr)
@@ -771,7 +780,14 @@ void DuploHub::staticColorSensorCallback(void *hub, byte portNumber, DeviceType 
         }
     }
 }
-
+/**
+ * @brief Timer hook that emits a stabilized color reading to the response queue.
+ *
+ * Invoked on the ESP timer task context after the debounce interval elapses. If the color sample
+ * remains unchanged since the last stable notification, no queue message is produced.
+ *
+ * @param arg Unused. Present to satisfy the timer callback signature.
+ */
 void DuploHub::colorStabilityTimerCallback(void *arg)
 {
     (void)arg;
