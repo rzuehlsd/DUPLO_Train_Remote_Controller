@@ -42,12 +42,49 @@
 #include "DuploHub.h"
 #include "LegoinoCommon.h"
 #include "esp_timer.h"
+#include "esp_err.h"
 
 #undef DEBUG// Enable debug logging
 #include "debug.h"
 
 // Initialize static instance pointer
 DuploHub *DuploHub::instance = nullptr;
+
+namespace
+{
+    constexpr uint64_t COLOR_SETTLE_DELAY_US = 250000; // 250 ms debounce window
+
+    // Shared state used to debounce the color sensor callback before emitting events
+    portMUX_TYPE colorTimerMutex = portMUX_INITIALIZER_UNLOCKED;
+    esp_timer_handle_t colorStabilityTimer = nullptr;
+    int pendingColor = -1;
+    int lastStableColor = -1;
+}
+
+bool DuploHub::ensureColorTimerInitialized()
+{
+    if (colorStabilityTimer != nullptr)
+    {
+        return true;
+    }
+
+    DEBUG_LOG("Created color stability timer ");
+    esp_timer_create_args_t timerArgs = {};
+    timerArgs.callback = &DuploHub::colorStabilityTimerCallback;
+    timerArgs.dispatch_method = ESP_TIMER_TASK;
+    timerArgs.name = "color_stability";
+    timerArgs.skip_unhandled_events = true;
+
+    esp_err_t err = esp_timer_create(&timerArgs, &colorStabilityTimer);
+    if (err != ESP_OK)
+    {
+        DEBUG_LOG("ERROR: Failed to create color stability timer (err=%d)", err);
+        colorStabilityTimer = nullptr;
+        return false;
+    }
+
+    return true;
+}
 
 /**
  * @brief Default constructor for DuploHub.
@@ -662,42 +699,119 @@ void DuploHub::activateVoltageSensor()
  */
 void DuploHub::staticColorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData)
 {
-    static int lastColor = -1;
-
     myLegoHub *myHub = (myLegoHub *)hub;
-    if (deviceType == DeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR)
+    (void)portNumber;
+
+    DEBUG_LOG("Enter color sensor static callback");
+
+    if (deviceType != DeviceType::DUPLO_TRAIN_BASE_COLOR_SENSOR)
     {
-        int detectedColor = myHub->parseColor(pData);
-        if (detectedColor >= DuploEnums::DuploColor::BLACK && detectedColor <= DuploEnums::DuploColor::WHITE)
+        DEBUG_LOG("ERROR: Unsupported device type for color sensor callback");
+        return;
+    }
+
+    int detectedColor = myHub->parseColor(pData);
+    if (detectedColor < DuploEnums::DuploColor::BLACK || detectedColor > DuploEnums::DuploColor::WHITE)
+    {
+        return; // Ignore out-of-range values entirely
+    }
+
+    if (!ensureColorTimerInitialized())
+    {
+        // Fallback: emit immediately if timer setup failed
+        if (instance != nullptr && instance->responseQueue != nullptr)
         {
-            // Only process valid color values
-            if (lastColor != detectedColor)
+            HubResponse response;
+            response.type = ResponseType::Detected_Color;
+            response.data.colorResponse.detectedColor = (DuploEnums::DuploColor)detectedColor;
+
+            if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE)
             {
-                DEBUG_LOG("(%ld) Static Color Callback - Last Color: %d , Detected Color: %d", millis(), lastColor, detectedColor);
-                lastColor = detectedColor;
-
-                // Access the singleton instance to get the response queue
-                if (instance != nullptr && instance->responseQueue != nullptr)
-                {
-                    HubResponse response;
-                    response.type = ResponseType::Detected_Color;
-                    response.data.colorResponse.detectedColor = (DuploEnums::DuploColor)detectedColor;
-
-                    if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE)
-                    {
-                        DEBUG_LOG("WARNING: Failed to queue color sensor response from static callback");
-                    }
-                }
-                else
-                {
-                    DEBUG_LOG("ERROR: Cannot access response queue from static color callback");
-                }
+                DEBUG_LOG("WARNING: Failed to queue color sensor response from static callback (timer init failure)");
             }
+        }
+        else
+        {
+            DEBUG_LOG("ERROR: Cannot access response queue from static color callback (timer init failure)");
+        }
+        return;
+    }
+
+    bool timerActive = esp_timer_is_active(colorStabilityTimer);
+    bool restartTimer = false;
+
+    // Store latest candidate color and only restart settling timer when something changed
+    portENTER_CRITICAL(&colorTimerMutex);
+    if (pendingColor != detectedColor)
+    {
+        pendingColor = detectedColor;
+        restartTimer = true;
+    }
+    else if (!timerActive)
+    {
+        // Timer already expired; ensure we arm it again to confirm stability
+        restartTimer = true;
+    }
+    portEXIT_CRITICAL(&colorTimerMutex);
+
+    if (restartTimer)
+    {
+        DEBUG_LOG("(%ld) Static Color Callback - Candidate Color: %d", millis(), detectedColor);
+
+        esp_err_t stopErr = esp_timer_stop(colorStabilityTimer);
+        if (stopErr != ESP_OK && stopErr != ESP_ERR_INVALID_STATE)
+        {
+            DEBUG_LOG("WARNING: Failed to stop color stability timer (err=%d)", stopErr);
+        }
+
+        esp_err_t startErr = esp_timer_start_once(colorStabilityTimer, COLOR_SETTLE_DELAY_US);
+        if (startErr != ESP_OK)
+        {
+            DEBUG_LOG("ERROR: Failed to start color stability timer (err=%d)", startErr);
+        }
+    }
+}
+
+void DuploHub::colorStabilityTimerCallback(void *arg)
+{
+    (void)arg;
+
+    int colorToEmit = -1;
+    portENTER_CRITICAL(&colorTimerMutex);
+    if (pendingColor >= DuploEnums::DuploColor::BLACK && pendingColor <= DuploEnums::DuploColor::WHITE)
+    {
+        if (pendingColor != lastStableColor)
+        {
+            colorToEmit = pendingColor;
+            lastStableColor = pendingColor;
+        }
+    }
+
+    pendingColor = -1;
+    portEXIT_CRITICAL(&colorTimerMutex);
+
+    if (colorToEmit == -1)
+    {
+        DEBUG_LOG("(%ld) Color Stability Timer - No state change", millis());
+        return;
+    }
+
+    DEBUG_LOG("(%ld) Static Color Callback - Stable Color: %d", millis(), colorToEmit);
+
+    if (instance != nullptr && instance->responseQueue != nullptr)
+    {
+        HubResponse response;
+        response.type = ResponseType::Detected_Color;
+        response.data.colorResponse.detectedColor = (DuploEnums::DuploColor)colorToEmit;
+
+        if (xQueueSend(instance->responseQueue, &response, pdMS_TO_TICKS(100)) != pdTRUE)
+        {
+            DEBUG_LOG("WARNING: Failed to queue color sensor response from stability timer");
         }
     }
     else
     {
-        DEBUG_LOG("ERROR: Unsupported device type for color sensor callback");
+        DEBUG_LOG("ERROR: Cannot access response queue from color stability timer");
     }
 }
 

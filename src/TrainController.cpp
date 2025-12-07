@@ -349,23 +349,24 @@ static void handleEncoderBtn(unsigned long)
  */
 static void detectedColorCb(DuploEnums::DuploColor color)
 {
-    return; 
-
-
     if (replay) {
         DEBUG_LOG("TrainController: Color sensor callback ignored during replay");
         return;
     }
+
     DEBUG_LOG("TrainController:  Detected Color: %d", color);
+
     detectedColor = color; // Store the detected color
     switch (color)
     {
     case DuploEnums::DuploColor::BLACK:
+        DEBUG_LOG("TrainController:  Detected Color: %d", DuploEnums::DuploColor::BLACK);   
         duploHub.setLedColor(DuploEnums::DuploColor::BLACK);
         statusLed.setColor(CRGB::Black);
         delay(DELAY_TIME);
         break;
     case DuploEnums::DuploColor::RED:
+        DEBUG_LOG("TrainController:  Detected Color: %d", DuploEnums::DuploColor::RED);
         emergencyStop = !emergencyStop; // Toggle emergency stop state
         statusLed.setColor(CRGB::Red);
         statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
@@ -376,6 +377,7 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         delay(DELAY_TIME);
         break;
     case DuploEnums::DuploColor::YELLOW:
+        DEBUG_LOG("TrainController:  Detected Color: %d", DuploEnums::DuploColor::YELLOW);
         duploHub.setLedColor(DuploEnums::DuploColor::YELLOW);
         statusLed.setColor(CRGB::Yellow);
         statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
@@ -384,6 +386,7 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         delay(DELAY_TIME);                                  // Allow time for sound to play
         break;
     case DuploEnums::DuploColor::BLUE:
+        DEBUG_LOG("TrainController:  Detected Color: %d", DuploEnums::DuploColor::BLUE);
         duploHub.setLedColor(DuploEnums::DuploColor::BLUE);
         statusLed.setColor(CRGB::Blue);
         statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
@@ -396,6 +399,7 @@ static void detectedColorCb(DuploEnums::DuploColor color)
         delay(DELAY_TIME);
         break;
     case DuploEnums::DuploColor::WHITE:
+        DEBUG_LOG("TrainController:  Detected Color: %d", DuploEnums::DuploColor::WHITE);
         for (int i = 0; i < 3; i++)
         {
             duploHub.setLedColor(DuploEnums::DuploColor::WHITE);
@@ -403,6 +407,9 @@ static void detectedColorCb(DuploEnums::DuploColor color)
             statusLed.setBlinking(true, 250, 250, 3); // Set LED color to white
         }
         break;
+    default:
+        DEBUG_LOG("TrainController:  Default Color action: %d", color);
+        duploHub.setLedColor(color);
     }
 }
 

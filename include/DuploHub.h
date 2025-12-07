@@ -167,6 +167,7 @@ private:
     
     // Command queue wrapper for recording functionality
     BaseType_t sendCommand(const HubCommand& cmd, TickType_t timeout);
+    static bool ensureColorTimerInitialized();
     
     static void bleTaskWrapper(void *parameter);
     void bleTaskFunction();
@@ -179,6 +180,7 @@ protected:
     // Sensor callback registration for lpf2hub
     typedef void (*ColorSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
     static void staticColorSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
+    static void colorStabilityTimerCallback(void *arg);
     typedef void (*SpeedSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
     static void staticSpeedSensorCallback(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
     typedef void (*VoltageSensorCallback)(void *hub, byte portNumber, DeviceType deviceType, uint8_t *pData);
