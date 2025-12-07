@@ -604,9 +604,13 @@ void setup()
     rotaryEncoder.begin();
 
     // Initialize DuploHub instance
-    //std::string hubMAC = "d8:71:4d:ce:ad:b2";
-    duploHub.init(); 
-    delay(1000);
+    // duploHub.init();
+
+    // Initialisieren mit MAC funktioniert auch, aber nicht klar ob sinnvoll
+    std::string hubMAC = "d8:71:4d:ce:ad:b2";
+    duploHub.init(hubMAC); 
+    
+    delay(200);
 
     // Register connection event callbacks
     duploHub.setOnConnectedCallback(onHubConnected);

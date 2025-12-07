@@ -68,71 +68,75 @@ For a detailed technical breakdown, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Multi-Task Processing with Bidirectional Communication
 
-```text
-ESP32 DUAL-CORE UTILIZATION:
+```mermaid
+graph LR
+   MainTask["<b>Core 1 – Main Task</b><br/>• Application logic<br/>• User interface<br/>• Status display<br/>• Demo logic<br/>• Sensor processing<br/>• Event callbacks"]
 
-Core 0 (BLE Task)                    Core 1 (Main Task)
-┌─────────────────┐                  ┌─────────────────┐
-│ • BLE Operations│                  │ • Application   │
-│ • Hub Connection│                  │ • User Interface│
-│ • Motor Commands│                  │ • Status Display│
-│ • LED Control   │                  │ • Demo Logic    │
-│ • Sensor Setup  │                  │ • Sensor Process│
-│ • Data Parsing  │                  │ • Callbacks     │
-└─────────────────┘                  └─────────────────┘
-         ↕                                    ↕
-┌─────────────────┐    FreeRTOS     ┌─────────────────┐
-│  commandQueue   │ ←──── Queues ───→│  sensorQueue    │
-│                 │                  │                 │
-│ • Motor Speed   │                  │ • Color Data    │
-│ • LED Color     │                  │ • Distance Data │
-│ • Sensor Activate│                 │ • Button Events │
-│ • Hub Settings  │                  │ • Connection    │
-└─────────────────┘                  └─────────────────┘
+   BleTask["<b>Core 0 – BLE Task</b><br/>• BLE operations<br/>• Hub connection<br/>• Motor commands<br/>• LED control<br/>• Sensor setup<br/>• Data parsing"]
 
-COMMAND FLOW: Main → BLE (motor control, sensor setup)
-SENSOR FLOW:  BLE → Main (sensor data, button presses)
+   MainTask --> |CommandQueue| BleTask
+
+   BleTask --> |SensorQueue| MainTask
+
+   classDef queueStyle fill:#f2f2f2,stroke:#333,stroke-width:1px
+   class CommandQueue,SensorQueue queueStyle
 ```
+
+
+
+
 
 ### Three-Layer Architecture
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    THREE-LAYER ARCHITECTURE                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│ ┌─────────────────────────────────────────────────────────────┐ │
-│ │              LAYER 1: APPLICATION LAYER                    │ │
-│ │                   (TrainController.cpp)                    │ │
-│ │  • Train demo sequence and state management                 │ │
-│ │  • User interface and status monitoring                     │ │
-│ │  • High-level train control logic                           │ │
-│ │  • Connection event handling                                │ │
-│ │  • Sensor data processing and callbacks                     │ │
-│ └─────────────────────────────────────────────────────────────┘ │
-│                   ↕ Clean API + Sensor Callbacks                │
-│ ┌─────────────────────────────────────────────────────────────┐ │
-│ │             LAYER 2: HARDWARE ABSTRACTION                  │ │
-│ │                     (DuploHub Class)                       │ │
-│ │  • Thread-safe command queuing system                       │ │
-│ │  • Bidirectional FreeRTOS queues (commands + sensors)       │ │
-│ │  • Multi-task management (dual-core ESP32)                  │ │
-│ │  • Connection state management                              │ │
-│ │  • Automatic recovery and error handling                    │ │
-│ │  • Sensor data routing and callback management              │ │
-│ └─────────────────────────────────────────────────────────────┘ │
-│                   ↕ Protocol Interface + Sensor Integration     │
-│ ┌─────────────────────────────────────────────────────────────┐ │
-│ │              LAYER 3: PROTOCOL LAYER                       │ │
-│ │                    (Lpf2Hub Library)                       │ │
-│ │  • LEGO Powered Up protocol implementation                  │ │
-│ │  • Bluetooth LE communication                              │ │
-│ │  • Device discovery and connection management               │ │
-│ │  • Motor and LED control commands                           │ │
-│ │  • Sensor data parsing and callbacks                        │ │
-│ └─────────────────────────────────────────────────────────────┘ │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+   Layer1["<b>Layer 1: Application Layer</b><br/>• Train demo sequence &amp; state management<br/>• User interface &amp; status monitoring<br/>• High-level control logic<br/>• Connection event handling<br/>• Sensor data processing &amp; callbacks"]
+
+   Layer2["<b>Layer 2: Hardware Abstraction</b><br/>• Thread-safe command queue<br/>• Bidirectional FreeRTOS queues<br/>• Multi-task management (dual-core ESP32)<br/>• Connection state management<br/>• Automatic recovery &amp; error handling<br/>• Sensor routing &amp; callback management"]
+
+   Layer3["<b>Layer 3: Protocol Layer</b><br/>• LEGO Powered Up protocol<br/>• Bluetooth LE communication<br/>• Device discovery &amp; connection<br/>• Motor &amp; LED control commands<br/>• Sensor data parsing &amp; callbacks"]
+
+   Layer1 -->|Clean API + sensor callbacks| Layer2
+   Layer2 -->|Protocol interface + sensor integration| Layer3
+```
+
+### duploHub.init() Bootstrapping Flow
+
+The following sequence diagram visualizes how the application brings up the BLE infrastructure when `duploHub.init()` is called from `TrainController::setup()`.
+
+```mermaid
+sequenceDiagram
+   participant TC as TrainController::setup
+   participant DH as DuploHub
+   participant RTOS as FreeRTOS Scheduler
+   participant BLE as BLE Task (Core 0)
+   participant Lpf2 as Lpf2Hub
+
+   TC->>DH: init()
+   activate DH
+   DH->>DH: initFreeRTOS()
+   DH->>RTOS: xTaskCreatePinnedToCore(bleTaskWrapper)
+   RTOS-->>DH: Task handle
+   deactivate DH
+   DH-->>TC: return
+
+   RTOS->>BLE: schedule bleTaskWrapper(this)
+   activate BLE
+   BLE->>DH: bleTaskFunction()
+   loop continuous loop
+      BLE->>DH: updateBLE()
+      alt Hub disconnected
+         DH->>Lpf2: hub.init()
+      else Hub connecting
+         DH->>Lpf2: connectHub()
+      end
+      opt Connection state change
+         DH-->>TC: onConnectedCallback()/onDisconnectedCallback()
+      end
+      BLE->>DH: processCommandQueue()
+      DH->>Lpf2: Execute queued command
+      BLE->>BLE: vTaskDelay(50 ms)
+   end
 ```
 
 ---

@@ -54,7 +54,7 @@ DuploHub *DuploHub::instance = nullptr;
  *
  * Initializes the DuploHub instance with the default motor port and resets all state variables.
  */
-DuploHub::DuploHub() : motorPort((byte)DuploEnums::DuploTrainHubPort::MOTOR), wasConnected(false),
+DuploHub::DuploHub() : motorPort((byte)DuploEnums::DuploTrainHubPort::MOTOR), wasConnected(false), hubMACAddress(""),
                        connectionState(false), connectingState(false),
                        connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
                        onConnectedCallback(nullptr), onDisconnectedCallback(nullptr),
@@ -68,7 +68,7 @@ DuploHub::DuploHub() : motorPort((byte)DuploEnums::DuploTrainHubPort::MOTOR), wa
  * @brief Constructor for DuploHub with a specific motor port.
  * @param port The port number to use for the motor.
  */
-DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false),
+DuploHub::DuploHub(byte port) : motorPort(port), wasConnected(false), hubMACAddress(""),
                                 connectionState(false), connectingState(false),
                                 connectionMutex(nullptr), commandQueue(nullptr), bleTaskHandle(nullptr),
                                 onConnectedCallback(nullptr), onDisconnectedCallback(nullptr),
@@ -200,8 +200,8 @@ void DuploHub::init()
 void DuploHub::init(const std::string &address)
 {
     DEBUG_LOG("WARNING: init(address) should not be called directly - BLE task handles initialization");
-    // For Phase 2, we'll store the address preference but let BLE task handle it
-    // This could be enhanced in Phase 3 to set a preferred address
+    hubMACAddress = address;
+    init();
 }
 
 /**
@@ -1007,7 +1007,15 @@ void DuploHub::updateBLE()
         {
             DEBUG_LOG("BLE Task: Attempting to reconnect to hub...");
         }
-        hub.init();
+        if(hubMACAddress != "")
+        {
+            hub.init(hubMACAddress);
+            DEBUG_LOG("BLE Task: Using preferred hub address: %s", hubMACAddress.c_str());
+        }
+        else
+        {
+            hub.init();
+        }
     }
 
     // Handle connection process

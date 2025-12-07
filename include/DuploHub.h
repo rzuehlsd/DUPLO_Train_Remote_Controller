@@ -129,6 +129,7 @@ class DuploHub
 private:
     myLegoHub hub; ///< Underlying hardware interface
     byte motorPort;
+    std::string hubMACAddress;
     bool wasConnected;
     static DuploHub *instance;
     volatile bool connectionState;

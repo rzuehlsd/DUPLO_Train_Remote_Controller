@@ -17,6 +17,10 @@
   - [x] Button Play gedrückt: -> gelbes dauer blinken bis Sequenz abgeschlossen oder Record erneut gedrückt wurde
   - [x] Bei Disconnect des Duplo Hubs 3 x weiß blinken
   - [x] Duplo Batterie Level low: 10x hektisches Blinken in rot alle 30 Sekunden
+  - [ ] Duplo Color Sensor gibt bei reflektierenden Oberflächen manchmal kurz hintereinander unterschiedliche Farbewerte aus
+    - [ ] Sensor muss "entprellt" werden
+      - [ ] Sensor Events innerhalb einer kurzen Zeitspanne (< 250ms) ignorieren
+      - [ ] Aufruf des Callbacks nur, wenn Sensor Event länger als Zeitspanne (5000ms) stabil ist
 
 - [ ] Controller Sleep Modus einbauen
   - [ ] wenn keine GUI Aktion für mehr als 5 Minuten soll der Controller in den Sleep Modus gehen
@@ -28,17 +32,17 @@
 
 - [ ] Optimierung des Codes
   - [ ] Redundanzen ausbauen
-  - [ ] Klare Verteilung der Verantwortlichkeiten:
-    - [ ] DuploHub -> Verbindung zur HArdware, Senden von Befehlen und Weiterleiten von Sensordaten
-    - [ ] myLegoHub ergänzt und erweitert die Legoino Lib und wird nur von DuploHub verwendet
-    - [ ] TrainController ist für die Umsetzung der GUI Kommandos und die Verarbeitung von Sensorrückmeldungen verantwortlich
-  - [ ] Reduzieren der Delays so dass die Initialisierung und die Herstellung der Bereitschaft des Controller deutlich schneller geht. Auch die LAtenz bei Kommandos mus reduziert werden. Klären welche minimalen Delays notwenndig sind damit die BLE Kommandos sicher ankommen.
+  - [x] Klare Verteilung der Verantwortlichkeiten:
+    - [x] DuploHub -> Verbindung zur Hardware, Senden von Befehlen und Weiterleiten von Sensordaten
+    - [x] myLegoHub ergänzt und erweitert die Legoino Lib und wird nur von DuploHub verwendet
+    - [x] TrainController ist für die Umsetzung der GUI Kommandos und die Verarbeitung von Sensorrückmeldungen verantwortlich
+  - [x] Reduzieren der Delays so dass die Initialisierung und die Herstellung der Bereitschaft des Controller deutlich schneller geht. Auch die Latenz bei Kommandos mus reduziert werden. Klären welche minimalen Delays notwenndig sind damit die BLE Kommandos sicher ankommen.
 
 ### 4. Hardware Modifikationen
-- [ ] Modifikation der Platine:
+- [x] Modifikation der Platine:
 - [ ] Controller Batterie Level Low: hecktisches Dauerblinken in rot - erfordert Modifikation der Platine und Überwachung der Spannung durch MCU -> aktuell nicht realisierbar
-  - [ ] Stop Button wird direkt über einen Digital Pin eingelesen
-  - [ ] Neben den Analog Buttons LED, Sound, Play und Replay noch einen Biutton für das Pairing und Wasseraufnehmen einbauen
+  - [x] Stop Button wird direkt über einen Digital Pin eingelesen
+  - [x] Neben den Analog Buttons LED, Sound, Play und Replay noch einen Biutton für das Pairing und Wasseraufnehmen einbauen. -_> Pairing scheint nicht sinnvoll, da zu kompliziert
     - [ ] Bei Pairing wird die ID des aktuell verbundenen Zuges gespeichert und primär beim nächsten Connect verwendet. Wird kein Hub mit der gespeicherten ID nach 60 Sekunden gefunden wird jeder aktive Hub verbunden
     - [ ] Pairing kann aufgehoben werden durch erneutes drücken des Knopfes
     - [ ] Bei Drücken von Wasseraufnehmen wird die gleiche Aktionssequenz wie bei dem blauen Duploplättchen durchgeführt
