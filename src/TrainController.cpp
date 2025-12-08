@@ -676,7 +676,7 @@ void setup()
 void checkStatus(DuploHub &duploHub)
 {
     static unsigned long lastStatusUpdate = 0;
-    if (millis() - lastStatusUpdate > 30000)
+    if (millis() - lastStatusUpdate > 300000)
     { // Every 30 seconds
         DEBUG_LOG("TrainController Status - BLE Task: %s, Hub Connected: %s",
                   duploHub.isBLETaskRunning() ? "Running" : "Stopped",

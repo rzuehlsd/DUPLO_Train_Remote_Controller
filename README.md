@@ -45,7 +45,13 @@
 
 ## Project Overview
 
-This project implements a robust, multi-layered, event-driven train controller for LEGO DUPLO trains. The firmware builds on top of the open-source [Legoino](https://github.com/corneliusmunz/legoino) library created by Cornelius Munz, reusing its Powered Up protocol support while adding a hardened hardware abstraction tailored to ESP32 dual-core devices.
+This project implements a robust, multi-layered, event-driven train controller for LEGO DUPLO trains. 
+
+The system not only covers the firmware to controll the DUPLO train but also the required hardware and the OpenSCAD files for the case of the handheld controller.
+
+I used a Tenstar Super Mini ESP32-S3 FH4R2 controller (yes, it is totally overkill for this application) because it provides onboard functionality as a RGB LED (used for user feedback) and a charging controller for a 3.7V Lithium battery. This onboard functionality reduced the required external components for the handheld controller to only 6 SMD switches, a rotary encoder and a few SMD resistors plus 1 capacitor.
+
+The firmware builds on top of the open-source [Legoino](https://github.com/corneliusmunz/legoino) library created by Cornelius Munz, reusing its Powered Up protocol support while adding a hardened hardware abstraction tailored to ESP32 dual-core devices. Using both cores to implement the app signifficantly increased the overall reliability.
 
 Key pillars of the solution include:
 
@@ -53,13 +59,15 @@ Key pillars of the solution include:
 - **Legoino-powered protocol stack**: Proven LEGO Powered Up discovery, device activation, and message parsing.
 - **Thread-safe command and sensor queues**: Bidirectional, non-blocking communication between BLE and main application tasks.
 - **Automatic connection management**: Self-healing BLE connections with exponential backoff recovery.
-- **Professional logging and monitoring**: Real-time status, error, and performance reporting.
+- **Enhanced logging and monitoring**: Real-time status, error, and performance reporting.
+- **Deep Sleep and Wakeup**: In case no user interactions have been detected for more than 5 minutes the device goes to sleep and can be waked up by pressing the encoder button.
 
 The high-level structure is summarised below; a deeper dive is available in [ARCHITECTURE.md](ARCHITECTURE.md).
 
----
 
 ## User Interface
+
+THe handheld DUPLO train controller has 6 switches and a rotary encoder to send BLE commands to the DUPLO train hub. User feedback is provided through the onboard RGB LED of the ESP32-S3 controller.
 
 ### Quick Start: Connecting a DUPLO Train
 - Power on the controller (ESP32) and the DUPLO Train Hub. 
@@ -71,24 +79,37 @@ The high-level structure is summarised below; a deeper dive is available in [ARC
 - After DUPLO train has connected, the controller’s RGB status LED turns to *blue** and blinks 3 times to confirm link.
 - If no hub is found, the status LED pulses **orange** every few seconds to prompt you to power cycle or move the train closer.
 
-### Primary Controls
-| Control | Action | Behaviour |
-|---------|--------|-----------|
-| Rotary encoder (turn) | Adjust train speed | Smooth throttle control from stop to full speed forward or backward with a centre detent for effortless neutral. |
-| Rotary encoder (press) | Wake controller / confirm prompts | Single press wakes the unit from deep sleep. |
-| Record button | Capture current driving session | RGB LED blinks slowly **red** while recording and stores timing for later playback. Push button again to stop recording.|
-| Play button | Replay last recorded session | RGB LED  blinks slowly **yellow** during replay; train reproduces motor, light, and sound cues. Press button again to stop replay of recorded session.|
-| Stop button | Immediate emergency stop | Motor power cuts instantly; RGB LED switches to solid **red** and plays break sound. Press button again to resume. RGB LED will go off and departure sound will be played.|
-| Light button | Cycle hub LED colours | Steps through preset colours so kids can theme their train without menus. |
-| Sound button | Trigger sound effects | Plays horn, brake, or station sounds instantly for interactive storytelling. |
-| Water button | Start refill routine | Pauses the train, plays refill sound, and resumes the previous throttle setting. |
+### Button & Encoder Actions
+- **Rotary encoder (turn):** Proportionally ramps the train motor between full reverse, neutral, and full forward with a tactile centre detent to simplify stops.
+- **Rotary encoder (press):** Wakes the controller from deep sleep.
+- **Record button:** Starts or stops capture of the current driving session, including speed, light, and sound changes for later replay.
+- **Play button:** Replays the most recently recorded session, mirroring the captured timing for motor, LED, and audio cues. Press again to stop replay.
+- **Stop button:** Issues an immediate emergency stop, cutting motor power and triggering the associated brake feedback sequence. To start normal operation the stop button **HAS TO BE PRESSED AGAIN**!
+- **Light button:** Cycles through the preset DUPLO hub LED colours so the train can be themed without using a screen or app.
+- **Sound button:** Steps through the curated horn, brake, and station audio effects for interactive play.
+- **Water button:** Runs the refill routine, pausing the train, playing the refill sound, and resuming at the previous throttle setting.
+
 
 ### Optical Feedback (Controller RGB LED)
 - **Blue (pulsing 5 times):** Connection to a DUPLO hub establish and ready for commands.
 - **Red (slow blinking):** Recording action sequence.
 - **Yellow (slow blinking):** Replaying action sequence.
 - **Red (steady):** Emergency stop engaged. Goes off if button is engaged again
-- **Red (fast pulses 5 times):** Signals low voltage of DUPLO train batterie every 30 seconds
+- **Red (fast pulses 5 times):** Signals low voltage of DUPLO train batterie every 300 seconds
+
+
+### Implemented Sensor Callbacks
+
+The controller provides callback implementations for speed, voltage and color sensor events. While the speed sensor is curently not used, the voltage sensor gives warning feedback, if battery voltage of DUPLO Train drops below 5V.
+
+The color sensor is used to detect the color bricks provided with the DUPLO train set to trigger preprogrammed actions. The dectection of the correct colors is very tricky as it depends on the refelection of the color bricks. So expect some wrong colors to be detected. As we overwrite the preprogrammed actions here is a short description of the implemented actions:
+
+- **RED** triggers an stop of the train with break sound and red headlights 
+- **YELLOW** triggers departure of the train with yellow blinking headlights and horn sound
+- **BLUE** triggers water refill action with blinking blue headlight, stop of train, water refill sound and departure of train with last defined speed
+
+
+Currently all other colored bricks just set the headlight to the respective color.
 
 ### Auto-Sleep & Wake-Up
 - After **5 minutes** without button presses or encoder turns, the controller enters deep sleep to save power; the status LED fades out to indicate standby.
@@ -106,7 +127,7 @@ The firmware is organised into three cooperating layers:
 
 These layers communicate exclusively through FreeRTOS queues and callbacks, which allows the BLE task and user interface to stay decoupled. The full architectural description, sequence diagrams, and performance considerations are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Dual-Core Strategy
+### Dual-Core Strategy
 
 The ESP32’s two cores are used deliberately to isolate time-critical communication from user-driven workloads:
 
@@ -115,14 +136,8 @@ The ESP32’s two cores are used deliberately to isolate time-critical communica
 
 This separation keeps latency predictable—even when the UI is busy—and prevents sensor interrupts or sound/LED routines from starving the communication pipeline.
 
-## Future Improvements
+### Future Improvements
 
-- Small Duplo Train Controller based on ESP32-S3 with integrated batterie management
-- small Lithium Batterie
-- Instead of Poti use of rotary encoder
-- Function to record actions and play back (Buttons Rec, Play)
-- small Duplo sized printed housing
-- only 3 Buttons to control LED, sound and emergency stop
 - Function to pair with train (store ID and use when connecting)
 
 
@@ -144,10 +159,6 @@ graph LR
    classDef queueStyle fill:#f2f2f2,stroke:#333,stroke-width:1px
    class CommandQueue,SensorQueue queueStyle
 ```
-
-
-
-
 
 ### Three-Layer Architecture
 
@@ -225,10 +236,10 @@ sequenceDiagram
 
 ### Primary Hardware
 
-- **ESP32 Development Board** (ESP32-S3 Dev kit or compatible)
+- **ESP32 Development Board ESP32-S3 Super Mini** (see link below)
     I use the Tenstar ESP32-S3 FH4R2 SuperMini which also includes cuircits to charge a 3.7V Lithium battery.
 - **LEGO DUPLO Train Hub** with motor connected to Port A
-- **USB Cable** for programming and power
+- **USB Type C Cable** for programming and power
 
 ### Supported LEGO Hardware
 
@@ -242,11 +253,11 @@ sequenceDiagram
 - **Memory**: 520KB SRAM, 4MB Flash minimum
 - **Connectivity**: Bluetooth 4.2 LE
 - **Operating Voltage**: 3.3V
-- **Power Consumption**: ~200mA during active operation
+- **Power Consumption**: ~130mA during active BLE operation
 
 ---
 
-## Hardware Roadmap
+## Hardware Design
 
 - A dedicated ESP32-S3 carrier board with battery management and button/encoder headers is being finalised in KiCad. The design files have be added to this repository in directory **hardware**.
 - A matching printable enclosure is being modelled in OpenSCAD to fit DUPLO geometry and house the controller, battery, and user controls. The `.scad` source will accompany the board files when released.
@@ -264,9 +275,10 @@ sequenceDiagram
 
 ### Libraries
 
-- **Legoino**: LEGO Powered Up protocol implementation
+- **Legoino**: LEGO Powered Up protocol implementation by Cornelius Munz
 - **NimBLE-Arduino**: Bluetooth Low Energy stack
-- **Bounce2**: Button debouncing (part of Legoino dependencies)
+
+All other libs used are provided as source in include and src dir.
 
 ### Library Versions
 
@@ -283,6 +295,8 @@ lib_deps =
 ---
 
 ## Installation
+
+Th development of this code has been done with MS Studio Code and PlatformIO.
 
 ### 1. Environment Setup
 
@@ -326,7 +340,7 @@ pio device monitor
 3. **Demo**: Once connected, the demo sequence begins automatically
 4. **Monitoring**: Status information is displayed every 10 seconds
 
-### Expected Serial Output
+### Expected Serial Debug Output
 
 ```text
 TrainController: Starting up...
@@ -341,40 +355,6 @@ TrainController: Starting train demo sequence...
 TrainController Status - BLE Task: Running, Hub Connected: Yes, Demo Active: Yes
 ```
 
-### Demo Sequence
-
-The system runs a continuous demonstration:
-
-1. **LED Green** → **LED Red** → **Motor Forward** → **Stop** → **Motor Backward** → **Stop** → **Repeat**
-2. Each step lasts 1 second
-3. Demo stops automatically if hub disconnects
-4. Demo resumes automatically when reconnected
-
----
-
-## User Interaction & LED Feedback
-
-| Interaction | Description | Hub Response | Status LED Feedback |
-|-------------|-------------|--------------|---------------------|
-| Rotary encoder turn | Adjusts desired train speed in ±5 steps | Issues `setMotorSpeed()` with normalized value or stops within the dead zone | None (hub LED reflects chosen colour elsewhere) |
-| Rotary encoder press | Logged when connected (reserved for future shortcuts) | Diagnostic log entry only | None |
-| Record button | Toggles command capture session | Starts/stops `DuploHub::recordCommands()` and clears replay flags | Blinks **blue** while recording, off when idle |
-| Play button | Toggles replay of the last recorded session | Invokes `DuploHub::replayCommands()` / `stopReplay()` | Blinks **yellow** during playback, off when idle |
-| Stop button | Acts as emergency stop or cancels replay | Stops the motor, plays brake sound, resets replay state | Solid **red** when emergency stop active, off otherwise |
-| Light button | Cycles DUPLO hub LED colours | Sends `setLedColor()` with the next palette entry | Hub LED changes colour (status LED unchanged) |
-| Sound button | Steps through horn / brake / station samples | Calls `playSound()` with the next sound ID (skips refill) | None |
-| Water button | Triggers the refill routine | Plays water refill sound and prepares LED transitions | None |
-| Idle timeout (~30 s) | No user input for the configured window | Calls `esp_deep_sleep_start()` | Brief status flash before sleep |
-
-Colour sensor events provide additional automation:
-
-- **Red tile** toggles the emergency stop, forces the hub LED red, blinks the status LED red, and plays the brake sound.
-- **Yellow tile** plays the horn while pulsing both LEDs yellow.
-- **Blue tile** pauses the train, plays the refill sound, then restores the last commanded speed.
-- **White tile** flashes both LEDs white three times as a checkpoint signal.
-- **Black tile** restores a neutral state by setting both LEDs to black.
-
-These interaction rules are processed via `DuploHub::processResponseQueue()` using the colour stability timer described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -625,6 +605,12 @@ DuploTrain/
 - [ ] No memory leaks during long operation
 - [ ] Task monitoring shows healthy system
 
+---
+
+## Links
+
+- [ESP32 Super Mini](https://de.aliexpress.com/item/1005010463397231.html?spm=a2g0o.productlist.main.4.54df76f7WPz7SU&aem_p4p_detail=202512080110153593710143562560003446235&algo_pvid=2100b7c8-e2b1-442a-bd2c-1100bbdba2ac&algo_exp_id=2100b7c8-e2b1-442a-bd2c-1100bbdba2ac-3&pdp_ext_f=%7B%22order%22%3A%222%22%2C%22eval%22%3A%221%22%2C%22fromPage%22%3A%22search%22%7D&pdp_npi=6%40dis%21EUR%215.49%215.49%21%21%2144.13%2144.13%21%40211b612817651850154035955e1646%2112000052495017919%21sea%21DE%216288981052%21X%211%210%21n_tag%3A-29919%3Bd%3A6804e1a2%3Bm03_new_user%3A-29895&curPageLogUid=KEHYNdqLToXo&utparam-url=scene%3Asearch%7Cquery_from%3A%7Cx_object_id%3A1005010463397231%7C_p_origin_prod%3A&search_p4p_id=202512080110153593710143562560003446235_1)
+- [Lithium Battery 3.7V](https://de.aliexpress.com/item/1005004378108918.html?spm=a2g0o.detail.pcDetailTopMoreOtherSeller.5.39c7kCFakCFaZ4&gps-id=pcDetailTopMoreOtherSeller&scm=1007.14452.478275.0&scm_id=1007.14452.478275.0&scm-url=1007.14452.478275.0&pvid=03756532-275c-4ab9-bd8a-2053af674cb4&_t=gps-id:pcDetailTopMoreOtherSeller,scm-url:1007.14452.478275.0,pvid:03756532-275c-4ab9-bd8a-2053af674cb4,tpp_buckets:668%232846%238108%231977&pdp_ext_f=%7B%22order%22%3A%2247%22%2C%22eval%22%3A%221%22%2C%22sceneId%22%3A%2230050%22%2C%22fromPage%22%3A%22recommend%22%7D&pdp_npi=6%40dis%21EUR%215.68%214.09%21%21%216.46%214.65%21%4021038e6617651853991155852e878e%2112000028967861661%21rec%21DE%216288981052%21X%211%210%21n_tag%3A-29919%3Bd%3A6804e1a2%3Bm03_new_user%3A-29895&utparam-url=scene%3ApcDetailTopMoreOtherSeller%7Cquery_from%3A%7Cx_object_id%3A1005004378108918%7C_p_origin_prod%3A&search_p4p_id=202512080116391515856091447492685637_4)
 ---
 
 ## License
