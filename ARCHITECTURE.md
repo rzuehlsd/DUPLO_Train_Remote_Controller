@@ -180,20 +180,23 @@ sequenceDiagram
 
 The firmware relies on two FreeRTOS queues to decouple the BLE task from the application loop:
 
-```
-MAIN LOOP (Core 1)                             BLE TASK (Core 0)
-┌────────────────────────────┐                ┌──────────────────────────┐
-│ TrainController::loop      │                │ DuploHub::bleTaskFunction│
-│  • Rotary & buttons        │                │  • hub.connectHub()      │
-│  • processResponseQueue.   │                │  • processCommandQueue   │
-│  • record / replay         │                │  • static callbacks      │
-├─────────────┬──────────────┤                ├─────────────┬────────────┤
-│             │ commandQueue │ ─────────────> │ Hub Command │            │
-│             │  (10 items)  │                │  execution  │            │
-├─────────────┬──────────────┤                ├─────────────┬────────────┤
-│             │ responseQueue│ <────────────  │ HubResponse │            │
-│             │ (100 items)  │                │ generation  │            │
-└─────────────┴──────────────┘                └─────────────┴────────────┘
+```mermaid
+flowchart LR
+    subgraph Core1["Main Loop (Core 1)"]
+        TC["TrainController::loop<br/>• Rotary & buttons<br/>• processResponseQueue<br/>• record / replay"]
+    end
+
+    subgraph Core0["BLE Task (Core 0)"]
+        BLE["DuploHub::bleTaskFunction<br/>• hub.connectHub()<br/>• processCommandQueue<br/>• static callbacks"]
+    end
+
+    CommandQueue["commandQueue<br/>(10 items)"]:::queue
+    ResponseQueue["responseQueue<br/>(100 items)"]:::queue
+
+    TC -->|commands| CommandQueue -->|dispatch| BLE
+    BLE -->|responses| ResponseQueue -->|process| TC
+
+    classDef queue fill:#f2f2f2,stroke:#555,stroke-width:1px;
 ```
 
 - `commandQueue` carries `HubCommand` objects from the application to the BLE task (motor, sound, LED, sensor activation, name changes). Each command includes a timestamp so the recorder can normalise playback timing.
@@ -762,10 +765,10 @@ DUPLO Train Hub Hardware
 ### Complete Command Processing Timeline
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        COMMAND PROCESSING TIMELINE                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
+┌────────────────────────────────────────────────────────────────────────┐
+│                        COMMAND PROCESSING TIMELINE                     │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
 │ Time 0ms:   Application calls duploHub.setMotorSpeed(50)               │
 │ Time 1ms:   Legacy wrapper calls setMotorSpeed_ThreadSafe(50)          │
 │ Time 3ms:   Command packaged and queued to commandQueue                │
@@ -776,9 +779,9 @@ DUPLO Train Hub Hardware
 │ Time 45ms:  NimBLE transmits BLE packet to DUPLO hub                   │
 │ Time 55ms:  DUPLO hub receives and processes command                   │
 │ Time 60ms:  DUPLO train motor starts rotating at speed 50              │
-│                                                                         │
+│                                                                        │
 │ TOTAL LATENCY: ~60ms from function call to physical motor response     │
-└─────────────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Command vs. Sensor Processing Comparison
