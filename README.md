@@ -20,22 +20,25 @@
 
 ## Table of Contents
 
-- [Project Overview](#-project-overview)
-- [Architecture Overview](#-architecture-overview)
-- [Dual-Core Strategy](#-dual-core-strategy)
-- [System Architecture](#-system-architecture)
-- [Features](#-features)
+- [Project Overview](#project-overview)
+- [User Interface](#user-interface)
+- [Architecture Overview](#architecture-overview)
+- [Dual-Core Strategy](#dual-core-strategy)
+- [Future Improvements](#future-improvements)
+- [System Architecture](#system-architecture)
+- [Features](#features)
 - [Hardware Requirements](#hardware-requirements)
-- [Hardware Roadmap](#-hardware-roadmap)
+- [Hardware Design](#hardware-design)
 - [Software Dependencies](#software-dependencies)
 - [Installation](#installation)
 - [Usage](#usage)
-- [User Interaction & LED Feedback](#-user-interaction--led-feedback)
+- [User Interaction & LED Feedback](#user-interaction--led-feedback)
 - [API Reference](#api-reference)
 - [System Monitoring](#system-monitoring)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Contributing](#contributing)
+- [Links](#links)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 - [Architecture](ARCHITECTURE.md)
@@ -482,15 +485,28 @@ TrainController Status - BLE Task: Running, Hub Connected: Yes, Demo Active: Yes
 
 ## How Sensor Processing Works
 
-When a DUPLO color sensor detects a color change, here's how it flows through the system:
+When a DUPLO color sensor detects a color change (e.g. RED to stop motor), here's how it flows through the system:
 
-```text
-1. DUPLO Sensor    →  2. BLE Radio    →  3. ESP32 Core 0
-   Detects RED        Transmits data     NimBLE + Lpf2Hub
-4. Static Callback →  5. Sensor Queue  →  6. ESP32 Core 1
-   Parse + Package     FreeRTOS Queue     Main Task Processing
-7. User Callback   →  8. Motor Command →  9. BLE Command
-   onColorDetected     stopMotor()         Back to DUPLO Hub
+```mermaid
+sequenceDiagram
+    participant Sensor as DUPLO Sensor
+    participant Radio as BLE Radio
+    participant Core0 as ESP32 Core 0
+    participant Callback as Static Callback
+    participant Queue as Sensor Queue
+    participant Core1 as ESP32 Core 1
+    participant UserCb as User Callback
+    participant Command as Motor Command
+    participant Hub as BLE Command
+
+    Sensor->>Radio: Detect colour change
+    Radio->>Core0: Forward via NimBLE + Lpf2Hub
+    Core0->>Callback: Parse and package payload
+    Callback->>Queue: Enqueue processed event
+    Queue->>Core1: Deliver via FreeRTOS queue
+    Core1->>UserCb: Invoke onColorDetected
+    UserCb->>Command: Decide motor action (e.g. stopMotor)
+    Command->>Hub: Send command back to DUPLO hub
 ```
 
 - **Total Time:** ~75ms from sensor detection to motor response
@@ -501,13 +517,26 @@ When a DUPLO color sensor detects a color change, here's how it flows through th
 
 When you call `duploHub.setMotorSpeed(50)`, here's how it flows through the system:
 
-```text
-1. Application     →  2. Thread-Safe   →  3. Command Queue
-   setMotorSpeed(50)  Wrapper Function     FreeRTOS Queue
-4. ESP32 Core 1    →  5. ESP32 Core 0   →  6. Protocol Format
-   Main Task Queue    BLE Task Processing   Lpf2Hub + LEGO Protocol
-7. BLE Transmission → 8. DUPLO Hub     →  9. Motor Hardware
-   NimBLE + Radio      Protocol Parse     PWM Signal to Motor
+```mermaid
+sequenceDiagram
+    participant App as Application Layer
+    participant Wrapper as Thread-Safe Wrapper
+    participant CmdQueue as Command Queue
+    participant Core1 as ESP32 Core 1
+    participant Core0 as ESP32 Core 0
+    participant Protocol as Protocol Formatter
+    participant Radio as BLE Transmission
+    participant Hub as DUPLO Hub
+    participant Motor as Motor Hardware
+
+    App->>Wrapper: setMotorSpeed(50)
+    Wrapper->>CmdQueue: Push command into FreeRTOS queue
+    CmdQueue->>Core1: Process next motor command
+    Core1->>Core0: Forward request to BLE task
+    Core0->>Protocol: Encode via Lpf2Hub protocol
+    Protocol->>Radio: Send over NimBLE stack
+    Radio->>Hub: Transmit to DUPLO hub
+    Hub->>Motor: Apply PWM to motor hardware
 ```
 
 - **Total Time:** ~60ms from function call to physical motor response
@@ -550,18 +579,39 @@ monitor_filters = esp32_exception_decoder
 ### Project Structure
 
 ```text
-DuploTrain/
+DuploTrain NG/
+├── hardware/
+│   └── DuploTrainController NG/
+│       ├── DuploTrainController NG.kicad_pcb
+│       ├── DuploTrainController NG.kicad_sch
+│       └── Gerber/
 ├── include/
-│   └── DuploHub.h              # Hardware abstraction layer header
-├── src/
-│   ├── TrainController.cpp     # Main application
-│   └── DuploHub.cpp           # Hardware abstraction implementation  
+│   ├── ADCButton.h
+│   ├── DuploHub.h
+│   ├── StatusLED.h
+│   ├── SystemMemory.h
+│   ├── debug.h
+│   └── myLegoHub.h
 ├── lib/
-│   ├── Legoino/               # LEGO Powered Up protocol library
-│   ├── NimBLE-Arduino/        # Bluetooth LE stack
-│   └── Bounce2/               # Button handling library
-├── platformio.ini             # Build configuration
-└── README.md                  # This file
+│   ├── Bounce2/
+│   ├── Legoino/
+│   └── NimBLE-Arduino/
+├── src/
+│   ├── ADCButton.cpp
+│   ├── DuploHub.cpp
+│   ├── StatusLED.cpp
+│   ├── SytemMemory.cpp
+│   ├── TrainController.cpp
+│   ├── debug.cpp
+│   └── myLegoHub.cpp
+├── test/
+│   ├── DuploTrainTests.cpp
+│   ├── DuploTrainTests.h
+│   └── README.md
+├── ARCHITECTURE.md
+├── CHANGELOG.md
+├── platformio.ini
+└── README.md
 ```
 
 ### Adding New Features
