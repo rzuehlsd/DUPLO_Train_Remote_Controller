@@ -593,7 +593,6 @@ DuploTrain NG/
 │   ├── debug.h
 │   └── myLegoHub.h
 ├── lib/
-│   ├── Bounce2/
 │   ├── Legoino/
 │   └── NimBLE-Arduino/
 ├── src/
