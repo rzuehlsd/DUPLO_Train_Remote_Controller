@@ -1,48 +1,74 @@
 # DUPLO Train Remote Controller System
 
 **A event-driven train remote control system for LEGO DUPLO, built on ESP32, FreeRTOS, and Bluetooth Low Energy (BLE).**
-
----
-
-**Author:** Ralf Zühlsdorff  
-**Copyright:** 2022-2025 Ralf Zühlsdorff
-
-**Version:** 2.0.0  
-**Last Updated:** July 2025  
-**Compatibility:** ESP32, Arduino Framework, PlatformIO
-
-**Disclaimer:** LEGO® and Duplo® are trademarks of the LEGO Group of companies which does not sponsor, authorize or endorse this project.
-
-**License:** MIT License (see LICENSE file for details)
-
----
-
-
 ## Table of Contents
 
-- [Project Overview](#project-overview)
-- [User Interface](#user-interface)
-- [Architecture Overview](#architecture-overview)
-- [Dual-Core Strategy](#dual-core-strategy)
-- [Future Improvements](#future-improvements)
-- [System Architecture](#system-architecture)
-- [Features](#features)
-- [Hardware Requirements](#hardware-requirements)
-- [Hardware Design](#hardware-design)
-- [Software Dependencies](#software-dependencies)
-- [Installation](#installation)
-- [Usage](#usage)
-- [User Interaction & LED Feedback](#user-interaction--led-feedback)
-- [API Reference](#api-reference)
-- [System Monitoring](#system-monitoring)
-- [Troubleshooting](#troubleshooting)
-- [Development](#development)
-- [Contributing](#contributing)
-- [Links](#links)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
-- [Architecture](ARCHITECTURE.md)
-- [Changelog](CHANGELOG.md)
+- [DUPLO Train Remote Controller System](#duplo-train-remote-controller-system)
+  - [Table of Contents](#table-of-contents)
+  - [Project Overview](#project-overview)
+  - [User Interface](#user-interface)
+    - [Quick Start: Connecting a DUPLO Train](#quick-start-connecting-a-duplo-train)
+    - [Button \& Encoder Actions](#button--encoder-actions)
+    - [Optical Feedback (Controller RGB LED)](#optical-feedback-controller-rgb-led)
+    - [Implemented Sensor Callbacks](#implemented-sensor-callbacks)
+    - [Auto-Sleep \& Wake-Up](#auto-sleep--wake-up)
+  - [Architecture Overview](#architecture-overview)
+    - [Dual-Core Strategy](#dual-core-strategy)
+    - [Future Improvements](#future-improvements)
+  - [System Architecture](#system-architecture)
+    - [Multi-Task Processing with Bidirectional Communication](#multi-task-processing-with-bidirectional-communication)
+    - [Three-Layer Architecture](#three-layer-architecture)
+    - [duploHub.init() Bootstrapping Flow](#duplohubinit-bootstrapping-flow)
+  - [Features](#features)
+  - [Hardware Requirements](#hardware-requirements)
+    - [Primary Hardware](#primary-hardware)
+    - [Supported LEGO Hardware](#supported-lego-hardware)
+    - [Technical Specifications](#technical-specifications)
+  - [Hardware Design](#hardware-design)
+  - [Software Dependencies](#software-dependencies)
+    - [Platform](#platform)
+    - [Libraries](#libraries)
+    - [Library Versions](#library-versions)
+  - [Installation](#installation)
+    - [1. Environment Setup](#1-environment-setup)
+    - [2. Project Build \& Upload](#2-project-build--upload)
+    - [3. Hardware Setup](#3-hardware-setup)
+  - [Usage](#usage)
+    - [Basic Operation](#basic-operation)
+    - [Expected Serial Debug Output](#expected-serial-debug-output)
+  - [API Reference](#api-reference)
+    - [DuploHub Class](#duplohub-class)
+      - [Connection Management](#connection-management)
+      - [Control Methods (Thread-Safe)](#control-methods-thread-safe)
+      - [Information Methods](#information-methods)
+      - [Event Callbacks](#event-callbacks)
+    - [DuploHubExtended Class (Sensor Support)](#duplohubextended-class-sensor-support)
+      - [Sensor Callbacks](#sensor-callbacks)
+      - [Sensor Activation (Thread-Safe)](#sensor-activation-thread-safe)
+      - [Example Usage](#example-usage)
+    - [Available Colors](#available-colors)
+    - [Motor Speed Range](#motor-speed-range)
+  - [System Monitoring](#system-monitoring)
+    - [Status Information](#status-information)
+    - [Log Message Prefixes](#log-message-prefixes)
+  - [Troubleshooting](#troubleshooting)
+    - [Common Issues \& Solutions](#common-issues--solutions)
+      - [Connection Problems](#connection-problems)
+      - [Task Failures](#task-failures)
+      - [Command Delays](#command-delays)
+    - [Debug Mode](#debug-mode)
+  - [Development](#development)
+    - [Project Structure](#project-structure)
+    - [Adding New Features](#adding-new-features)
+      - [New Train Commands](#new-train-commands)
+      - [New Hub Types](#new-hub-types)
+    - [Code Style Guidelines](#code-style-guidelines)
+  - [Contributing](#contributing)
+    - [Development Process](#development-process)
+    - [Testing Checklist](#testing-checklist)
+  - [Links](#links)
+  - [License](#license)
+  - [Acknowledgments](#acknowledgments)
 
 ---
 
@@ -262,16 +288,23 @@ sequenceDiagram
 
 ## Hardware Design
 
-- A dedicated ESP32-S3 carrier board with battery management and button/encoder headers is being finalised in KiCad. The design files have be added to this repository in directory **hardware**.
-- A matching printable enclosure is being modelled in OpenSCAD to fit DUPLO geometry and house the controller, battery, and user controls. The `.scad` source will accompany the board files when released.
-- Until the hardware package lands, the firmware runs on off-the-shelf ESP32 DevKit boards with external wiring as described above.
+The following images show the KiCAD 3d view of the controller pcb and the OpenSCAD view of the controller case. To design the controller case the MachineBlocks library from pks5 (https://github.com/pks5/machineblocks) has been used.
 
----
+<p align="center">
+    <img src="images/ControllerBoard%203d.png" alt="Controller board 3D render" width="26%">
+    <img src="images/ControllerCase.png" alt="Controller case" width="60%">
+</p>
+
+
+- A dedicated ESP32-S3 carrier board with battery management and button/encoder headers is captured in KiCad inside `hardware/DuploTrainController NG`.
+- A matching printable enclosure is modelled in OpenSCAD in `hardware/Case`, which also embeds the MachineBlocks library to speed up iteration on DUPLO-sized parts.
+
+See [hardware/Hardware.md](hardware/Hardware.md) for a detailed description of the custom controller hardware.
+
 
 ## Software Dependencies
 
 ### Platform
-
 - **PlatformIO**: Development platform
 - **ESP32 Arduino Framework**: Core ESP32 support
 - **FreeRTOS**: Real-time operating system (included with ESP32)
@@ -423,6 +456,7 @@ void activateDistanceSensor(byte port);   // Activate distance sensor on specifi
 void activateButton();                    // Activate hub button monitoring
 ```
 
+
 #### Example Usage
 
 ```cpp
@@ -483,66 +517,6 @@ TrainController Status - BLE Task: Running, Hub Connected: Yes, Demo Active: Yes
 
 ---
 
-## How Sensor Processing Works
-
-When a DUPLO color sensor detects a color change (e.g. RED to stop motor), here's how it flows through the system:
-
-```mermaid
-sequenceDiagram
-    participant Sensor as DUPLO Sensor
-    participant Radio as BLE Radio
-    participant Core0 as ESP32 Core 0
-    participant Callback as Static Callback
-    participant Queue as Sensor Queue
-    participant Core1 as ESP32 Core 1
-    participant UserCb as User Callback
-    participant Command as Motor Command
-    participant Hub as BLE Command
-
-    Sensor->>Radio: Detect colour change
-    Radio->>Core0: Forward via NimBLE + Lpf2Hub
-    Core0->>Callback: Parse and package payload
-    Callback->>Queue: Enqueue processed event
-    Queue->>Core1: Deliver via FreeRTOS queue
-    Core1->>UserCb: Invoke onColorDetected
-    UserCb->>Command: Decide motor action (e.g. stopMotor)
-    Command->>Hub: Send command back to DUPLO hub
-```
-
-- **Total Time:** ~75ms from sensor detection to motor response
-
----
-
-## How Motor Control Works
-
-When you call `duploHub.setMotorSpeed(50)`, here's how it flows through the system:
-
-```mermaid
-sequenceDiagram
-    participant App as Application Layer
-    participant Wrapper as Thread-Safe Wrapper
-    participant CmdQueue as Command Queue
-    participant Core1 as ESP32 Core 1
-    participant Core0 as ESP32 Core 0
-    participant Protocol as Protocol Formatter
-    participant Radio as BLE Transmission
-    participant Hub as DUPLO Hub
-    participant Motor as Motor Hardware
-
-    App->>Wrapper: setMotorSpeed(50)
-    Wrapper->>CmdQueue: Push command into FreeRTOS queue
-    CmdQueue->>Core1: Process next motor command
-    Core1->>Core0: Forward request to BLE task
-    Core0->>Protocol: Encode via Lpf2Hub protocol
-    Protocol->>Radio: Send over NimBLE stack
-    Radio->>Hub: Transmit to DUPLO hub
-    Hub->>Motor: Apply PWM to motor hardware
-```
-
-- **Total Time:** ~60ms from function call to physical motor response
-
----
-
 ## Troubleshooting
 
 ### Common Issues & Solutions
@@ -581,10 +555,19 @@ monitor_filters = esp32_exception_decoder
 ```text
 DuploTrain NG/
 ├── hardware/
-│   └── DuploTrainController NG/
-│       ├── DuploTrainController NG.kicad_pcb
-│       ├── DuploTrainController NG.kicad_sch
-│       └── Gerber/
+│   ├── Case/
+│   │   ├── Controller.scad
+│   │   ├── MachineBlocks/
+│   │   └── lib/
+│   ├── DuploTrainController NG/
+│   │   ├── DuploTrainController NG.kicad_pcb
+│   │   ├── DuploTrainController NG.kicad_sch
+│   │   ├── DuploTrainController NG.kicad_pro
+│   │   ├── DuploTrainController NG.kicad_prl
+│   │   ├── DuploTrainController NG.kicad_pcb.zip
+│   │   ├── 5 Buttons an ADC.xlsx
+│   │   └── Gerber/
+│   └── README.md
 ├── include/
 │   ├── ADCButton.h
 │   ├── DuploHub.h
@@ -660,6 +643,7 @@ DuploTrain NG/
 
 - [ESP32 Super Mini](https://de.aliexpress.com/item/1005010463397231.html?spm=a2g0o.productlist.main.4.54df76f7WPz7SU&aem_p4p_detail=202512080110153593710143562560003446235&algo_pvid=2100b7c8-e2b1-442a-bd2c-1100bbdba2ac&algo_exp_id=2100b7c8-e2b1-442a-bd2c-1100bbdba2ac-3&pdp_ext_f=%7B%22order%22%3A%222%22%2C%22eval%22%3A%221%22%2C%22fromPage%22%3A%22search%22%7D&pdp_npi=6%40dis%21EUR%215.49%215.49%21%21%2144.13%2144.13%21%40211b612817651850154035955e1646%2112000052495017919%21sea%21DE%216288981052%21X%211%210%21n_tag%3A-29919%3Bd%3A6804e1a2%3Bm03_new_user%3A-29895&curPageLogUid=KEHYNdqLToXo&utparam-url=scene%3Asearch%7Cquery_from%3A%7Cx_object_id%3A1005010463397231%7C_p_origin_prod%3A&search_p4p_id=202512080110153593710143562560003446235_1)
 - [Lithium Battery 3.7V](https://de.aliexpress.com/item/1005004378108918.html?spm=a2g0o.detail.pcDetailTopMoreOtherSeller.5.39c7kCFakCFaZ4&gps-id=pcDetailTopMoreOtherSeller&scm=1007.14452.478275.0&scm_id=1007.14452.478275.0&scm-url=1007.14452.478275.0&pvid=03756532-275c-4ab9-bd8a-2053af674cb4&_t=gps-id:pcDetailTopMoreOtherSeller,scm-url:1007.14452.478275.0,pvid:03756532-275c-4ab9-bd8a-2053af674cb4,tpp_buckets:668%232846%238108%231977&pdp_ext_f=%7B%22order%22%3A%2247%22%2C%22eval%22%3A%221%22%2C%22sceneId%22%3A%2230050%22%2C%22fromPage%22%3A%22recommend%22%7D&pdp_npi=6%40dis%21EUR%215.68%214.09%21%21%216.46%214.65%21%4021038e6617651853991155852e878e%2112000028967861661%21rec%21DE%216288981052%21X%211%210%21n_tag%3A-29919%3Bd%3A6804e1a2%3Bm03_new_user%3A-29895&utparam-url=scene%3ApcDetailTopMoreOtherSeller%7Cquery_from%3A%7Cx_object_id%3A1005004378108918%7C_p_origin_prod%3A&search_p4p_id=202512080116391515856091447492685637_4)
+- [MachineBlocks](https://github.com/pks5/machineblocks)
 ---
 
 ## License
