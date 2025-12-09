@@ -1,5 +1,11 @@
 # Duplo Train Controller Hardware
 
+**Author:** Ralf Zühlsdorff  
+**Copyright:** (c) 2025 Ralf Zühlsdorff  
+**License:** MIT License
+
+---
+
 The hardware package covers both the custom ESP32-S3 controller PCB and the printable enclosure that transforms the electronics into a DUPLO-friendly handheld remote. Everything required to reproduce or iterate on the physical controller—KiCad sources, manufacturing files, OpenSCAD models, and helper assets—lives in this directory.
 
 ## Directory Layout
