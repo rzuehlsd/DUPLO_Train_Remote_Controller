@@ -130,16 +130,18 @@ THe handheld DUPLO train controller has 6 switches and a rotary encoder to send 
 - **Red (slow blinking):** Recording action sequence.
 - **Yellow (slow blinking):** Replaying action sequence.
 - **Red (steady):** Emergency stop engaged. Goes off if button is engaged again
-- **Red (fast pulses 5 times):** Signals low voltage of DUPLO train batterie every 300 seconds
+- **Red (fast pulses 5 times):** Signals low voltage of DUPLO train battery every 300 seconds
 
 
 ### Implemented Sensor Callbacks
 
-The controller provides callback implementations for speed, voltage and color sensor events. While the speed sensor is curently not used, the voltage sensor gives warning feedback, if battery voltage of DUPLO Train drops below 5V.
 
-The color sensor is used to detect the color bricks provided with the DUPLO train set to trigger preprogrammed actions. The dectection of the correct colors is very tricky as it depends on the refelection of the color bricks. So expect some wrong colors to be detected. As we overwrite the preprogrammed actions here is a short description of the implemented actions:
+The controller provides callback implementations for speed, voltage and color sensor events. While the speed sensor is currently not used, the voltage sensor gives warning feedback, if battery voltage of DUPLO Train drops below 5V.
 
-- **RED** triggers an stop of the train with break sound and red headlights 
+
+The color sensor is used to detect the color bricks provided with the DUPLO train set to trigger preprogrammed actions. The detection of the correct colors is very tricky as it depends on the reflection of the color bricks. So expect some wrong colors to be detected. As we overwrite the preprogrammed actions here is a short description of the implemented actions:
+
+- **RED** triggers a stop of the train with brake sound and red headlights
 - **YELLOW** triggers departure of the train with yellow blinking headlights and horn sound
 - **BLUE** triggers water refill action with blinking blue headlight, stop of train, water refill sound and departure of train with last defined speed
 

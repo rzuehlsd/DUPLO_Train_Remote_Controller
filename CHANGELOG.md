@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [2.1.0] - 2025-01-20
 
 ### Added
+
 - **DuploHubExtended class** with bidirectional sensor data support
 - **Sensor callback system** for color, distance, and button events
 - **Second FreeRTOS queue** (sensorQueue) for BLE → Main task communication

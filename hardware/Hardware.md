@@ -58,9 +58,10 @@ The 6 function buttons are handled via ADC input with ADCButton lib, so just one
 
 The encoder button is detected via a different GPIO pin for two reasons. First it provides a kind of second level for all function switches to implement future requirements. But main reason was that this button is used to wake the controller from deep sleep.
 
-The Lithium 3.7V batterie is connected to B+ and B- at the ESP32-S3. The schematic and pcb could be kept very simple as all functionality to handle charging is handled by the ESP32-S3 Super Mini. 
 
-PCB has been produced by PCBways.
+The Lithium 3.7V battery is connected to B+ and B- at the ESP32-S3. The schematic and PCB could be kept very simple as all functionality to handle charging is implemented by the ESP32-S3 Super Mini.
+
+PCB has been produced by PCBWay.
 
 
 ## Case Development
@@ -86,17 +87,19 @@ Case/
 	├── svg3d.scad
 	└── text3d.scad
 ```
-THe case was designed based on a lib and an example from MachinBlocks. 
-It covers the case with a bottom part and a lid with cutouts for 6 buttons, the encoder and the usb connector.
 
-There are 2 black buttons for recording (with red dot) and replay (with white triangle). The red button is used to initiate the emergency stop, the blue buttond is used for water refill, the white button to switch the headlight led of the train and the yellow to activate different sounds.
+The case was designed based on a library and an example from MachineBlocks.
+It covers the case with a bottom part and a lid with cutouts for 6 buttons, the encoder, and the USB connector.
+
+There are 2 black buttons for recording (with red dot) and replay (with white triangle). The red button is used to initiate the emergency stop, the blue button is used for water refill, the white button to switch the headlight LED of the train, and the yellow to activate different sounds.
 
 
 <p align="center">
 	<img src="../images/ControllerCase.png" alt="Controller Case" width="78%">
 </p>
 
-The design is provided as scad file and exports to 3mf and stl files have been added for 3d printing.
+
+The design is provided as a SCAD file and export to 3MF and STL files have been added for 3D printing.
 
 
 > **Note:** Both electrical and mechanical assets are version-controlled to keep the manufactured controller in sync with the firmware. When regenerating Gerbers or STLs, audit changes to ensure they reflect intentional design updates.
